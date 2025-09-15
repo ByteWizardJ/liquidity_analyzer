@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KATAK LIAR (KTL) 流动性分布图</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .title {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 500px;
+            border: 2px solid #333;
+            margin: 20px 0;
+            background: linear-gradient(to right, #f0f8ff, #fff0f5);
+        }
+        .axis-label {
+            position: absolute;
+            font-weight: bold;
+            color: #333;
+        }
+        .x-axis-label {
+            bottom: -40px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        .y-axis-label {
+            left: -60px;
+            top: 50%;
+            transform: translateY(-50%) rotate(-90deg);
+        }
+        .liquidity-bar {
+            position: absolute;
+            background: linear-gradient(to top, #4CAF50, #81C784);
+            border: 2px solid #2E7D32;
+            border-radius: 4px 4px 0 0;
+            opacity: 0.8;
+        }
+        .price-marker {
+            position: absolute;
+            width: 3px;
+            height: 100%;
+            background: red;
+            z-index: 10;
+        }
+        .price-label {
+            position: absolute;
+            background: red;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            z-index: 11;
+        }
+        .tick-labels {
+            position: absolute;
+            bottom: -25px;
+            font-size: 10px;
+            color: #666;
+            text-align: center;
+        }
+        .liquidity-labels {
+            position: absolute;
+            top: -20px;
+            font-size: 11px;
+            color: #333;
+            font-weight: bold;
+            text-align: center;
+            background: rgba(255,255,255,0.9);
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        .legend {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 5px;
+        }
+        .legend-item {
+            display: inline-block;
+            margin-right: 20px;
+            margin-bottom: 10px;
+        }
+        .legend-color {
+            display: inline-block;
+            width: 20px;
+            height: 15px;
+            margin-right: 5px;
+            vertical-align: middle;
+        }
+        .info-box {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border-left: 4px solid #2196F3;
+        }
+        .price-range {
+            font-family: monospace;
+            background: #f5f5f5;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        .warning-box {
+            background: #fff3e0;
+            border-left-color: #ff9800;
+        }
+        .success-box {
+            background: #e8f5e8;
+            border-left-color: #4caf50;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="title">🎯 KATAK LIAR (KTL) 流动性分布图</h1>
+        
+        <div class="info-box">
+            <h3>📊 代币基本信息</h3>
+            <p><strong>代币名称:</strong> KATAK LIAR (KTL)</p>
+            <p><strong>代币地址:</strong> 0x5e855aad812e76fbfffc692b55193cf7399e72eb</p>
+            <p><strong>池子地址:</strong> 0x0d1374437df95dd6ab49ceb11523c4a695c38f34</p>
+            <p><strong>初始价格:</strong> <span class="price-range">1 KTL = 4.108e-7 WMONAD</span> (Tick -147058)</p>
+            <p><strong>代币顺序:</strong> Token0 = TOKEN, Token1 = WMONAD</p>
+            <p><strong>毕业区块:</strong> 34393776</p>
+            <p><strong>毕业时间:</strong> 9/1/2025, 5:04:38 PM</p>
+        </div>
+
+        <div class="chart-container">
+            <!-- Y轴标签 -->
+            <div class="axis-label y-axis-label">流动性数量</div>
+            
+            <!-- X轴标签 -->
+            <div class="axis-label x-axis-label">KTL价格 (1 KTL = ? WMONAD)</div>
+            
+            <!-- 低价区间流动性 -->
+            
+            <div class="liquidity-bar" style="left: 8%; width: 35%; height: 40%; bottom: 0;">
+                <div class="liquidity-labels">84.005301 WMONAD</div>
+            </div>
+            
+
+            <!-- 高价区间流动性 -->
+            
+            <div class="liquidity-bar" style="left: 50%; width: 42%; height: 40%; bottom: 0;">
+                <div class="liquidity-labels">206.90M TOKEN</div>
+            </div>
+            
+
+            <!-- 初始价格标记 -->
+            <div class="price-marker" style="left: 45.5%;"></div>
+            <div class="price-label" style="left: 45.5%; top: 10%; transform: translateX(-50%);">
+                池初始价格<br>
+                Tick -147058<br>
+                4.108e-7 WMONAD
+            </div>
+
+            <!-- 初始价格标记（基于虚拟流动性） -->
+            <div class="price-marker" style="left: 8.2%; background: green;"></div>
+            <div class="price-label" style="left: 8.2%; top: 25%; transform: translateX(-50%); background: green;">
+                初始价格<br>
+                (虚拟流动性)<br>
+                2.796e-8 WMONAD
+            </div>
+
+            <!-- 真实毕业价格标记（基于储备状态） -->
+            <div class="price-marker" style="left: 45.5%; background: blue;"></div>
+            <div class="price-label" style="left: 45.5%; top: 55%; transform: translateX(-50%); background: blue;">
+                真实毕业价格<br>
+                (储备状态)<br>
+                4.109e-7 WMONAD
+            </div>
+
+            <!-- 流动性缺口标记 -->
+            
+            <div style="position: absolute; left: 43%; width: 7%; height: 100%; background: repeating-linear-gradient(45deg, #ffcccc, #ffcccc 10px, #ffffff 10px, #ffffff 20px); opacity: 0.6; z-index: 5;"></div>
+            <div style="position: absolute; left: 43%; top: 45%; width: 7%; text-align: center; font-size: 10px; color: #cc0000; font-weight: bold; z-index: 11;">
+                缺口<br>400 ticks
+            </div>
+            
+
+            <!-- Tick标签 -->
+            
+            <div class="tick-labels" style="left: 8%; width: 35%;">
+                <div>Tick -174200 → -147200</div>
+                <div style="margin-top: 5px; font-size: 9px;">
+                    2.723e-8 → 4.050e-7 WMONAD
+                </div>
+            </div>
+            
+
+            
+            <div class="tick-labels" style="left: 50%; width: 42%;">
+                <div>Tick -146800 → -54800</div>
+                <div style="margin-top: 5px; font-size: 9px;">
+                    4.216e-7 → 0.004170472 WMONAD
+                </div>
+            </div>
+            
+
+            <!-- 价格轴刻度 -->
+            <div style="position: absolute; bottom: -15px; left: 10%; font-size: 10px; color: #666;">
+                低价格
+            </div>
+            <div style="position: absolute; bottom: -15px; left: 45%; font-size: 10px; color: #666; transform: translateX(-50%);">
+                初始价格
+            </div>
+            <div style="position: absolute; bottom: -15px; right: 10%; font-size: 10px; color: #666;">
+                高价格
+            </div>
+        </div>
+
+        <div class="legend">
+            <h3>📋 图例说明</h3>
+            <div class="legend-item">
+                <span class="legend-color" style="background: linear-gradient(to top, #4CAF50, #81C784);"></span>
+                流动性区间
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background: red;"></span>
+                初始价格位置
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background: #f0f8ff;"></span>
+                无流动性区域
+            </div>
+        </div>
+
+        <div class="info-box">
+            <h3>🔍 流动性分析</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 15px;">
+                
+                <div>
+                    <h4>📉 KTL低价区间</h4>
+                    <p><strong>Tick范围:</strong> -174200 → -147200</p>
+                    <p><strong>价格范围:</strong> 2.723e-8 → 4.050e-7 WMONAD</p>
+                    <p><strong>提供资产:</strong> 84.005301 WMONAD</p>
+                    <p><strong>作用:</strong> 当KTL价格下跌时，用WMONAD买入KTL</p>
+                </div>
+                
+                
+                <div>
+                    <h4>📈 KTL高价区间</h4>
+                    <p><strong>Tick范围:</strong> -146800 → -54800</p>
+                    <p><strong>价格范围:</strong> 4.216e-7 → 0.004170472 WMONAD</p>
+                    <p><strong>提供资产:</strong> 206.90M TOKEN</p>
+                    <p><strong>作用:</strong> 当KTL价格上涨时，卖出KTL换取TOKEN</p>
+                </div>
+                
+            </div>
+        </div>
+
+        
+        <div class="info-box warning-box">
+            <h3>⚠️ 流动性缺口警告</h3>
+            <p><strong>问题:</strong> 初始价格 (Tick -147058) 位于两个流动性区间之间</p>
+            <p><strong>缺口大小:</strong> 400 ticks (Tick -147200 → -146800)</p>
+            <p><strong>影响:</strong> 毕业后无法立即在初始价格附近交易，会产生价格跳跃</p>
+        </div>
+        
+
+        <div class="info-box success-box">
+            <h3>🎯 交易机制说明</h3>
+            <p><strong>买入KTL:</strong> 价格会跳跃到KTL高价区间，用WMONAD换取KTL</p>
+            <p><strong>卖出KTL:</strong> 价格会跳跃到KTL低价区间，用KTL换取WMONAD</p>
+            <p><strong>注意:</strong> 由于存在流动性缺口，交易时会有明显的价格跳跃和滑点。</p>
+        </div>
+
+        <div class="info-box">
+            <h3>🔗 相关交易链接</h3>
+            <p><strong>代币创建交易:</strong> <a href="https://testnet.monadexplorer.com/tx/0x9eb6fc9fa3608a882a6f01fe39e73c29f913b174131bd2d35a39e7734b93ec36" target="_blank" style="color: #2196F3; text-decoration: none;">0x9eb6fc9f...4b93ec36</a></p>
+            <p><strong>毕业储备状态:</strong> <a href="https://testnet.monadexplorer.com/tx/0x05ec6f276d0cd52ccf0a33dc2f5ddbdd7fa8844417d2b2d836c9d7a62b590ed9" target="_blank" style="color: #2196F3; text-decoration: none;">0x05ec6f27...2b590ed9</a></p>
+            <p><strong>代币毕业交易:</strong> <a href="https://testnet.monadexplorer.com/tx/0xd0fcf0bb8004d94d26698674dd1d6ea23827b9f9edbe47ae2174bb9e237e81e3" target="_blank" style="color: #2196F3; text-decoration: none;">0xd0fcf0bb...237e81e3</a></p>
+        </div>
+
+        <div class="info-box">
+            <h3>📅 生成信息</h3>
+            <p><strong>生成时间:</strong> 9/1/2025, 6:27:54 PM</p>
+            <p><strong>数据来源:</strong> Monad Testnet 区块链数据</p>
+            <p><strong>工具版本:</strong> generateLatestLiquidityChart.js v1.0</p>
+        </div>
+    </div>
+</body>
+</html>

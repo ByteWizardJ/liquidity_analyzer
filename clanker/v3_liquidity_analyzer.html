@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clanker v3.1 流动性分析器</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #2196F3, #42A5F5);
+            color: white;
+            border-radius: 10px;
+        }
+        
+        .info-section, .chart-section {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .analyze-btn {
+            padding: 12px 30px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: background-color 0.3s;
+        }
+        
+        .analyze-btn:hover {
+            background: #1976D2;
+        }
+
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .summary-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #2196F3;
+        }
+        
+        .summary-card h3 {
+            margin: 0 0 15px 0;
+            color: #2196F3;
+        }
+        
+        .summary-card p {
+            margin: 8px 0;
+            color: #555;
+        }
+
+        .results-section {
+            display: none;
+        }
+        
+        .v3-highlight {
+            background: #e3f2fd;
+            border: 2px solid #2196F3;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📊 Clanker v3.1 流动性分析器</h1>
+        <p>分析v3.1版本的单边流动性配置</p>
+    </div>
+
+    <div class="info-section">
+        <h2>🔧 v3.1 流动性特点</h2>
+        <div class="v3-highlight">
+            <h3>🎯 核心特征:</h3>
+            <ul>
+                <li>✅ <strong>单边流动性</strong>: 只提供代币，不提供配对资产(ETH/WETH)</li>
+                <li>✅ <strong>固定费率</strong>: 1.00% 交易手续费（Uniswap V3最高标准费率）</li>
+                <li>✅ <strong>简单策略</strong>: 单一价格范围，从初始Tick到最大Tick</li>
+                <li>✅ <strong>固定供应</strong>: 1000亿代币总供应，70%提供流动性</li>
+                <li>✅ <strong>金库机制</strong>: 可配置的代币锁定比例</li>
+            </ul>
+        </div>
+        
+        <h3>📋 示例数据 (noice代币)</h3>
+        <div style="background: #f0f8f0; padding: 15px; border-radius: 8px; font-family: monospace;">
+            <p><strong>交易哈希:</strong> 0x009332549dbca862ea6d309bafcfa689f021a29001fccc6e9a93692944f3a07e</p>
+            <p><strong>代币名称:</strong> noice</p>
+            <p><strong>代币符号:</strong> NOICE</p>
+            <p><strong>初始价格Tick:</strong> -230400</p>
+            <p><strong>金库比例:</strong> 30% (300亿代币锁定)</p>
+            <p><strong>流动性供应:</strong> 70% (700亿代币)</p>
+            <p><strong>初始购买:</strong> 1.0 ETH</p>
+        </div>
+        
+        <button class="analyze-btn" onclick="analyzeV3Liquidity()" style="margin-top: 20px;">分析v3.1流动性配置</button>
+    </div>
+
+    <div id="results" class="results-section">
+        <!-- 结果将在这里动态生成 -->
+    </div>
+
+
+    <script>
+        let chart = null;
+        
+        // v3.1 示例数据
+        const v3SampleData = {
+            tokenName: "noice",
+            tokenSymbol: "NOICE", 
+            totalSupply: 100000000000, // 1000亿
+            initialTick: -230400,
+            vaultPercentage: 30,
+            liquidityPercentage: 70,
+            initialBuyETH: 1.0,
+            feeRate: 10000, // 1.00%
+            // v3.1是单边流动性，从initialTick到MAX_TICK
+            liquidityRange: {
+                tickLower: -230400,
+                tickUpper: 887200, // MAX_TICK for 1% fee tier
+                tokens: 70000000000 // 700亿代币
+            }
+        };
+        
+        function tickToPrice(tick) {
+            return Math.pow(1.0001, tick);
+        }
+        
+        function analyzeV3Liquidity() {
+            const analysis = processV3Data(v3SampleData);
+            displayV3Results(analysis);
+            document.getElementById('results').style.display = 'block';
+        }
+        
+        function processV3Data(data) {
+            const initialPrice = tickToPrice(data.initialTick);
+            const maxPrice = tickToPrice(data.liquidityRange.tickUpper);
+            const minPrice = initialPrice;
+            
+            return {
+                tokenName: data.tokenName,
+                tokenSymbol: data.tokenSymbol,
+                totalSupply: data.totalSupply,
+                vaultTokens: data.totalSupply * data.vaultPercentage / 100,
+                liquidityTokens: data.totalSupply * data.liquidityPercentage / 100,
+                initialTick: data.initialTick,
+                initialPrice: initialPrice,
+                minPrice: minPrice,
+                maxPrice: maxPrice,
+                priceRange: (maxPrice / minPrice).toExponential(2),
+                feeRate: data.feeRate / 10000,
+                initialBuyETH: data.initialBuyETH,
+                liquidityRange: {
+                    ...data.liquidityRange,
+                    priceLower: minPrice,
+                    priceUpper: maxPrice
+                }
+            };
+        }
+        
+        function displayV3Results(analysis) {
+            const resultsDiv = document.getElementById('results');
+            
+            const html = `
+                <div class="info-section">
+                    <h2 style="color: #2196F3; margin-bottom: 20px;">📊 ${analysis.tokenSymbol} 流动性分析结果</h2>
+
+                    <div class="summary-cards">
+                        <div class="summary-card">
+                            <h3>📋 基本信息</h3>
+                            <p><strong>代币名称:</strong> ${analysis.tokenName}</p>
+                            <p><strong>代币符号:</strong> ${analysis.tokenSymbol}</p>
+                            <p><strong>总供应量:</strong> ${(analysis.totalSupply / 1000000000).toFixed(0)}十亿 代币</p>
+                            <p><strong>流动性供应:</strong> ${(analysis.liquidityTokens / 1000000000).toFixed(0)}十亿 代币</p>
+                            <p><strong>金库锁定:</strong> ${(analysis.vaultTokens / 1000000000).toFixed(0)}十亿 代币</p>
+                        </div>
+
+                        <div class="summary-card">
+                            <h3>💰 价格信息</h3>
+                            <p><strong>初始价格:</strong> ${analysis.initialPrice.toExponential(3)} WETH</p>
+                            <p><strong>价格上限:</strong> 无限制 (MAX_TICK)</p>
+                            <p><strong>理论范围:</strong> ${analysis.priceRange}x</p>
+                            <p><strong>初始Tick:</strong> ${analysis.initialTick}</p>
+                            <p><strong>手续费率:</strong> ${analysis.feeRate}%</p>
+                        </div>
+
+                        <div class="summary-card">
+                            <h3>🎯 v3.1 策略特点</h3>
+                            <p><strong>流动性模式:</strong> 单边流动性</p>
+                            <p><strong>价格策略:</strong> 单一范围 (简单)</p>
+                            <p><strong>初始购买:</strong> ${analysis.initialBuyETH} ETH</p>
+                            <p><strong>资本效率:</strong> 低 (范围过宽)</p>
+                            <p><strong>适用场景:</strong> 新代币启动</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chart-section">
+                    <h3>📈 v3.1 单边流动性分布图</h3>
+                    <canvas id="v3LiquidityChart" style="max-height: 400px; width: 100%;"></canvas>
+                </div>
+
+                <div class="info-section">
+                    <h3>📊 详细分析</h3>
+                    <div class="v3-highlight">
+                        <h4>🏊 流动性配置详情:</h4>
+                        <p><strong>价格范围:</strong> [${analysis.liquidityRange.priceLower.toExponential(6)}, ∞] WETH</p>
+                        <p><strong>Tick范围:</strong> [${analysis.liquidityRange.tickLower.toLocaleString()}, ${analysis.liquidityRange.tickUpper.toLocaleString()}]</p>
+                        <p><strong>流动性密度:</strong> ${Math.round(analysis.liquidityRange.tokens / (analysis.liquidityRange.tickUpper - analysis.liquidityRange.tickLower)).toLocaleString()} 代币/tick</p>
+                        
+                    </div>
+                </div>
+            `;
+
+            resultsDiv.innerHTML = html;
+            generateV3Chart(analysis);
+        }
+        
+        function generateV3Chart(analysis) {
+            const ctx = document.getElementById('v3LiquidityChart').getContext('2d');
+
+            // 销毁现有图表
+            if (chart) {
+                chart.destroy();
+            }
+
+            // 创建v3.1的单边流动性可视化
+            // v3.1是从初始价格到无穷大的矩形区域
+            const datasets = [{
+                label: 'v3.1 单边流动性',
+                data: [
+                    {x: analysis.minPrice, y: 0},
+                    {x: analysis.minPrice, y: analysis.liquidityTokens / 100000000}, // 亿为单位
+                    {x: analysis.maxPrice * 0.1, y: analysis.liquidityTokens / 100000000}, // 显示部分范围
+                    {x: analysis.maxPrice * 0.1, y: 0}
+                ],
+                backgroundColor: 'rgba(33, 150, 243, 0.3)',
+                borderColor: '#2196F3',
+                borderWidth: 2,
+                fill: true,
+                tension: 0,
+                pointRadius: 0,
+                pointHoverRadius: 8
+            }];
+
+            // 添加初始价格标记
+            datasets.push({
+                label: '初始价格',
+                data: [{x: analysis.initialPrice, y: 0}],
+                backgroundColor: '#ff5722',
+                borderColor: '#ff5722',
+                pointRadius: 15,
+                pointHoverRadius: 20,
+                showLine: false,
+                type: 'scatter'
+            });
+
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: { datasets: datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    aspectRatio: 2.5,
+                    scales: {
+                        x: {
+                            type: 'logarithmic',
+                            title: {
+                                display: true,
+                                text: `${analysis.tokenSymbol}价格 (1 ${analysis.tokenSymbol} = ? WETH) - 对数刻度`,
+                                font: { size: 14, weight: 'bold' }
+                            },
+                            min: analysis.minPrice * 0.5,
+                            max: analysis.maxPrice * 0.1, // 显示有限范围
+                            ticks: {
+                                callback: function(value) {
+                                    return value.toExponential(2);
+                                }
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: '流动性 (亿代币)',
+                                font: { size: 14, weight: 'bold' }
+                            },
+                            min: 0,
+                            ticks: {
+                                callback: function(value) {
+                                    return value.toFixed(0) + '亿';
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            mode: 'nearest',
+                            intersect: false,
+                            callbacks: {
+                                title: function(context) {
+                                    if (context[0].datasetIndex === 1) {
+                                        return '📍 初始价格标记';
+                                    }
+                                    return context[0].dataset.label;
+                                },
+                                label: function(context) {
+                                    if (context.datasetIndex === 1) {
+                                        return `初始价格: ${analysis.initialPrice.toExponential(6)} WETH`;
+                                    }
+
+                                    return [
+                                        `价格范围: [${analysis.minPrice.toExponential(6)}, ∞] WETH`,
+                                        `流动性: ${(analysis.liquidityTokens / 1000000000).toFixed(0)}十亿代币 (70%)`,
+                                        `Tick范围: [${analysis.liquidityRange.tickLower.toLocaleString()}, ${analysis.liquidityRange.tickUpper.toLocaleString()}]`,
+                                        `特点: v3.1单边流动性，资本效率较低但覆盖全范围`
+                                    ];
+                                }
+                            }
+                        },
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 20
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>

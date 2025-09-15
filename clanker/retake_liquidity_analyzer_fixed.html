@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RETAKE流动性分析器 (修正版)</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* 样式代码保持不变 */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #795548, #8d6e63);
+            color: white;
+            border-radius: 10px;
+        }
+        
+        .error-message {
+            background: #ffebee;
+            color: #c62828;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #f44336;
+            margin: 20px 0;
+        }
+        
+        .data-comparison {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .input-section, .chart-section, .position-details {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .analyze-btn {
+            padding: 12px 30px;
+            background: #795548;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: background-color 0.3s;
+        }
+        
+        .analyze-btn:hover {
+            background: #6d4c41;
+        }
+
+        .chart-controls {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .chart-controls button {
+            padding: 8px 16px;
+            margin: 0 5px;
+            border: 2px solid #795548;
+            background: white;
+            color: #795548;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .chart-controls button.active,
+        .chart-controls button:hover {
+            background: #795548;
+            color: white;
+        }
+
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .summary-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #795548;
+        }
+        
+        .summary-card h3 {
+            margin: 0 0 15px 0;
+            color: #795548;
+        }
+        
+        .summary-card p {
+            margin: 8px 0;
+            color: #555;
+        }
+
+        .position-item {
+            margin: 15px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #795548;
+        }
+        
+        .position-item h4 {
+            color: #795548;
+            margin: 0 0 10px 0;
+        }
+        
+        .position-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .results-section {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📊 RETAKE流动性分析器</h1>
+        <p>分析RETAKE代币的Uniswap V4流动性配置</p>
+    </div>
+
+    <div class="data-comparison">
+        <h2>📊 RETAKE代币基本信息</h2>
+        <div style="background: #f0f8f0; padding: 20px; border-radius: 8px; font-family: monospace;">
+            <p><strong>代币地址:</strong> 0x5eeB2662615782b58251b6f0c3E107571ae1AB07</p>
+            <p><strong>WETH地址:</strong> 0x4200000000000000000000000000000000000006</p>
+            <p><strong>总供应量:</strong> 100,000,000,000 (1000亿代币)</p>
+            <p><strong>初始价格Tick:</strong> -230400</p>
+            <br>
+            <p><strong>流动性位置分配 (基于70%供应 = 700亿代币):</strong></p>
+            <p>• 位置1: [-230,400, -214,000] → 10% = 70亿代币</p>
+            <p>• 位置2: [-214,000, -155,000] → 50% = 350亿代币</p>
+            <p>• 位置3: [-202,000, -155,000] → 15% = 105亿代币</p>
+            <p>• 位置4: [-155,000, -120,000] → 20% = 140亿代币</p>
+            <p>• 位置5: [-141,000, -120,000] → 5% = 35亿代币</p>
+            <br>
+            <p><strong>扩展分配:</strong></p>
+            <p>• ClankerVault: 30% = 300亿代币 (锁定)</p>
+            <p>• DevBuy: 0.5 ETH 购买</p>
+        </div>
+    </div>
+
+    <div class="input-section">
+        <h2>📊 开始流动性分析</h2>
+        <button class="analyze-btn" onclick="analyzeWithCorrectedData()">分析RETAKE流动性配置</button>
+    </div>
+
+    <div id="results" class="results-section">
+        <!-- 结果将在这里动态生成 -->
+    </div>
+
+    <script>
+        let chart = null;
+        let chartMode = 'overlay';
+        // 修正后的 RETAKE 数据
+        const correctedRetakeData = {
+            address: "0x5eeB2662615782b58251b6f0c3E107571ae1AB07",
+            wethAddress: "0x4200000000000000000000000000000000000006",
+            totalSupply: 100000000000, // 1000亿 (正确)
+            initialTick: -230400, // 负数 (正确)
+            positions: [
+                { tickLower: -230400, tickUpper: -214000, tokens: 7000000000, percentage: 10.0, label: "位置1 - 最高价区间" },
+                { tickLower: -214000, tickUpper: -155000, tokens: 35000000000, percentage: 50.0, label: "位置2 - 主要流动性" },
+                { tickLower: -202000, tickUpper: -155000, tokens: 10500000000, percentage: 15.0, label: "位置3 - 重叠加强" },
+                { tickLower: -155000, tickUpper: -120000, tokens: 14000000000, percentage: 20.0, label: "位置4 - 中价支撑" },
+                { tickLower: -141000, tickUpper: -120000, tokens: 3500000000, percentage: 5.0, label: "位置5 - 重叠加强" }
+            ],
+            extensions: [
+                { name: "ClankerVault", tokens: 30000000000, percentage: 30.0 },
+                { name: "DevBuy", ethAmount: 0.5 }
+            ]
+        };
+
+        // 显示修正后的数据
+        console.log("修正后的RETAKE数据:", correctedRetakeData);
+        
+        // 验证总和
+        const liquidityTotal = correctedRetakeData.positions.reduce((sum, pos) => sum + pos.tokens, 0);
+        const extensionTotal = correctedRetakeData.extensions[0].tokens;
+        const grandTotal = liquidityTotal + extensionTotal;
+        
+        console.log("流动性总计:", liquidityTotal / 1000000000, "十亿");
+        console.log("扩展总计:", extensionTotal / 1000000000, "十亿");
+        console.log("总计:", grandTotal / 1000000000, "十亿");
+        console.log("是否匹配总供应:", grandTotal === correctedRetakeData.totalSupply);
+
+        // 使用修正数据进行分析
+        function analyzeWithCorrectedData() {
+            const analysis = processRetakeData(correctedRetakeData);
+            displayRetakeResults(analysis);
+            document.getElementById('results').style.display = 'block';
+        }
+
+        // 处理修正后的数据
+        function processRetakeData(data) {
+            function tickToPrice(tick) {
+                return Math.pow(1.0001, tick);
+            }
+
+            // 正确的价格计算逻辑：
+            // RETAKE: 0x5eeB2662615782b58251b6f0c3E107571ae1AB07
+            // WETH:   0x4200000000000000000000000000000000000006  
+            // 由于 RETAKE地址 > WETH地址，所以：token0 = WETH, token1 = RETAKE
+            // tick 表示的是 token1/token0 的价格，即 RETAKE/WETH
+            // 所以 price = 1.0001^tick 直接就是 1 RETAKE = ? WETH 的价格
+
+            // 处理每个位置的价格信息
+            const processedPositions = data.positions.map((pos, index) => {
+                // 直接计算价格，不需要取倒数
+                // tick越大，RETAKE价格越高
+                const retakePriceLower = tickToPrice(pos.tickLower); // 1 RETAKE = ? WETH at lower tick
+                const retakePriceUpper = tickToPrice(pos.tickUpper); // 1 RETAKE = ? WETH at upper tick
+
+                return {
+                    ...pos,
+                    index: index + 1,
+                    priceLower: retakePriceLower,
+                    priceUpper: retakePriceUpper,
+                    tickRange: pos.tickUpper - pos.tickLower,
+                    liquidityDensity: pos.tokens / (pos.tickUpper - pos.tickLower)
+                };
+            });
+
+            // 计算价格范围
+            const allPrices = processedPositions.flatMap(p => [p.priceLower, p.priceUpper]);
+            const minPrice = Math.min(...allPrices);
+            const maxPrice = Math.max(...allPrices);
+
+            // 计算初始价格
+            const initialPrice = tickToPrice(data.initialTick);
+
+            return {
+                tokenAddress: data.address,
+                wethAddress: data.wethAddress,
+                positions: processedPositions,
+                totalSupply: data.totalSupply,
+                liquiditySupply: processedPositions.reduce((sum, pos) => sum + pos.tokens, 0),
+                vaultSupply: data.extensions[0].tokens,
+                initialTick: data.initialTick,
+                initialPrice: initialPrice,
+                minPrice: minPrice,
+                maxPrice: maxPrice,
+                priceRange: (maxPrice / minPrice).toFixed(1),
+                extensions: data.extensions
+            };
+        }
+
+        // 显示分析结果
+        function displayRetakeResults(analysis) {
+            const resultsDiv = document.getElementById('results');
+
+            const html = `
+                <div class="data-comparison">
+                    <h2 style="color: #795548; margin-bottom: 20px;">📊 RETAKE流动性分析结果</h2>
+
+                    <div class="summary-cards">
+                        <div class="summary-card">
+                            <h3>📋 基本信息</h3>
+                            <p><strong>代币地址:</strong> <code>${analysis.tokenAddress}</code></p>
+                            <p><strong>WETH地址:</strong> <code>${analysis.wethAddress}</code></p>
+                            <p><strong>总供应量:</strong> ${(analysis.totalSupply / 1000000000).toFixed(0)}十亿 代币</p>
+                            <p><strong>流动性供应:</strong> ${(analysis.liquiditySupply / 1000000000).toFixed(0)}十亿 代币</p>
+                            <p><strong>金库锁定:</strong> ${(analysis.vaultSupply / 1000000000).toFixed(0)}十亿 代币</p>
+                        </div>
+
+                        <div class="summary-card">
+                            <h3>💰 价格信息</h3>
+                            <p><strong>初始价格:</strong> ${analysis.initialPrice.toExponential(3)} WETH</p>
+                            <p><strong>最低价格:</strong> ${analysis.minPrice.toExponential(3)} WETH</p>
+                            <p><strong>最高价格:</strong> ${analysis.maxPrice.toExponential(3)} WETH</p>
+                            <p><strong>价格范围:</strong> ${analysis.priceRange}x</p>
+                            <p><strong>初始Tick:</strong> ${analysis.initialTick}</p>
+                        </div>
+
+                        <div class="summary-card">
+                            <h3>🎯 流动性策略</h3>
+                            <p><strong>流动性位置:</strong> ${analysis.positions.length}个</p>
+                            <p><strong>主要策略:</strong> 集中流动性 + 重叠加强</p>
+                            <p><strong>最大位置:</strong> 位置2 (50% = 350十亿代币)</p>
+                            <p><strong>平均密度:</strong> ${Math.round(analysis.positions.reduce((sum, pos) => sum + pos.liquidityDensity, 0) / analysis.positions.length).toLocaleString()} 代币/tick</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chart-section">
+                    <h3>📈 流动性分布图表</h3>
+                    <div class="chart-controls">
+                        <button id="overlayBtn" class="active" onclick="switchChartMode('overlay')">重叠视图</button>
+                        <button id="stackedBtn" onclick="switchChartMode('stacked')">堆叠视图</button>
+                    </div>
+                    <canvas id="retakeLiquidityChart" style="max-height: 400px; width: 100%;"></canvas>
+                </div>
+
+                <div class="position-details">
+                    <h3>📊 详细位置分析</h3>
+                    ${generatePositionDetails(analysis)}
+                </div>
+            `;
+
+            resultsDiv.innerHTML = html;
+            generateRetakeChart(analysis);
+        }
+
+        // 生成位置详情
+        function generatePositionDetails(analysis) {
+            return analysis.positions.map(pos => `
+                <div class="position-item">
+                    <h4>${pos.label}</h4>
+                    <div class="position-grid">
+                        <div>
+                            <p><strong>Tick范围:</strong> [${pos.tickLower.toLocaleString()}, ${pos.tickUpper.toLocaleString()}]</p>
+                            <p><strong>Tick宽度:</strong> ${pos.tickRange.toLocaleString()} ticks</p>
+                            <p><strong>流动性密度:</strong> ${Math.round(pos.liquidityDensity).toLocaleString()} 代币/tick</p>
+                        </div>
+                        <div>
+                            <p><strong>价格范围:</strong> [${pos.priceLower.toExponential(3)}, ${pos.priceUpper.toExponential(3)}] WETH</p>
+                            <p><strong>代币数量:</strong> ${(pos.tokens / 1000000000).toFixed(0)}十亿 代币</p>
+                            <p><strong>占比:</strong> ${pos.percentage.toFixed(1)}% 流动性供应</p>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 创建重叠视图数据集
+        function createOverlayDatasets(analysis, colors) {
+            return analysis.positions.map((pos, index) => {
+                const colorConfig = colors[index % colors.length];
+                return {
+                    label: pos.label,
+                    data: [
+                        {x: pos.priceLower, y: 0},
+                        {x: pos.priceLower, y: pos.tokens / 100000000},
+                        {x: pos.priceUpper, y: pos.tokens / 100000000},
+                        {x: pos.priceUpper, y: 0}
+                    ],
+                    backgroundColor: colorConfig.bg,
+                    borderColor: colorConfig.border,
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0,
+                    pointRadius: 0,
+                    pointHoverRadius: 8
+                };
+            });
+        }
+
+        // 创建堆叠视图数据集（矩形堆叠）
+        function createStackedDatasets(analysis, colors) {
+            // 计算每个价格区间的堆叠高度
+            const stackedPositions = calculateStackedHeights(analysis.positions);
+            
+            return stackedPositions.map((pos, index) => {
+                const colorConfig = colors[index % colors.length];
+                
+                return {
+                    label: pos.label,
+                    data: [
+                        {x: pos.priceLower, y: pos.stackedBottom / 100000000},
+                        {x: pos.priceLower, y: pos.stackedTop / 100000000},
+                        {x: pos.priceUpper, y: pos.stackedTop / 100000000},
+                        {x: pos.priceUpper, y: pos.stackedBottom / 100000000}
+                    ],
+                    backgroundColor: colorConfig.bg,
+                    borderColor: colorConfig.border,
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0,
+                    pointRadius: 0,
+                    pointHoverRadius: 8
+                };
+            });
+        }
+        
+        // 计算堆叠高度
+        function calculateStackedHeights(positions) {
+            const result = [];
+            
+            // 为每个位置计算其在堆叠中的位置
+            positions.forEach((pos, index) => {
+                let stackedBottom = 0;
+                
+                // 计算当前位置下方的堆叠高度
+                for (let i = 0; i < index; i++) {
+                    const prevPos = positions[i];
+                    // 检查是否有重叠
+                    if (pos.priceLower < prevPos.priceUpper && pos.priceUpper > prevPos.priceLower) {
+                        stackedBottom += prevPos.tokens;
+                    }
+                }
+                
+                result.push({
+                    ...pos,
+                    stackedBottom: stackedBottom,
+                    stackedTop: stackedBottom + pos.tokens
+                });
+            });
+            
+            return result;
+        }
+
+        // 生成图表
+        function generateRetakeChart(analysis) {
+            const ctx = document.getElementById('retakeLiquidityChart').getContext('2d');
+
+            // 销毁现有图表
+            if (chart) {
+                chart.destroy();
+            }
+
+            // 颜色配置
+            const colors = [
+                { bg: 'rgba(255, 107, 107, 0.6)', border: '#ff6b6b' },
+                { bg: 'rgba(78, 205, 196, 0.6)', border: '#4ecdc4' },
+                { bg: 'rgba(69, 183, 209, 0.6)', border: '#45b7d1' },
+                { bg: 'rgba(156, 39, 176, 0.6)', border: '#9c27b0' },
+                { bg: 'rgba(255, 152, 0, 0.6)', border: '#ff9800' }
+            ];
+
+            // 根据图表模式创建不同的数据集
+            const datasets = chartMode === 'stacked' ? 
+                createStackedDatasets(analysis, colors) : 
+                createOverlayDatasets(analysis, colors);
+
+            // 添加初始价格标记
+            datasets.push({
+                label: '初始价格',
+                data: [{x: analysis.initialPrice, y: 0}],
+                backgroundColor: '#ff5722',
+                borderColor: '#ff5722',
+                pointRadius: 15,
+                pointHoverRadius: 20,
+                showLine: false,
+                type: 'scatter'
+            });
+
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: { datasets: datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    aspectRatio: 2.5,
+                    scales: {
+                        x: {
+                            type: 'logarithmic',
+                            title: {
+                                display: true,
+                                text: 'RETAKE价格 (1 RETAKE = ? WETH) - 对数刻度',
+                                font: { size: 14, weight: 'bold' }
+                            },
+                            min: analysis.minPrice * 0.5,
+                            max: analysis.maxPrice * 2,
+                            stacked: false, // 矩形堆叠不需要Chart.js的自动堆叠
+                            ticks: {
+                                callback: function(value) {
+                                    return value.toExponential(2);
+                                }
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: '流动性 (亿代币)',
+                                font: { size: 14, weight: 'bold' }
+                            },
+                            min: 0,
+                            stacked: false, // 矩形堆叠不需要Chart.js的自动堆叠
+                            ticks: {
+                                callback: function(value) {
+                                    return value.toFixed(0) + '亿';
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            mode: 'nearest',
+                            intersect: false,
+                            callbacks: {
+                                title: function(context) {
+                                    if (context[0].datasetIndex === datasets.length - 1) {
+                                        return '📍 初始价格标记';
+                                    }
+                                    return context[0].dataset.label;
+                                },
+                                label: function(context) {
+                                    if (context.datasetIndex === datasets.length - 1) {
+                                        return `初始价格: ${analysis.initialPrice.toExponential(6)} WETH`;
+                                    }
+
+                                    const position = analysis.positions[context.datasetIndex];
+                                    return [
+                                        `价格范围: ${position.priceLower.toExponential(6)} - ${position.priceUpper.toExponential(6)} WETH`,
+                                        `流动性: ${(position.tokens / 1000000000).toFixed(0)}十亿代币 (${position.percentage.toFixed(1)}%)`,
+                                        `Tick范围: [${position.tickLower.toLocaleString()}, ${position.tickUpper.toLocaleString()}]`,
+                                        `流动性密度: ${Math.round(position.liquidityDensity).toLocaleString()} 代币/tick`
+                                    ];
+                                }
+                            }
+                        },
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 20
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 切换图表模式
+        function switchChartMode(mode) {
+            chartMode = mode;
+            const overlayBtn = document.getElementById('overlayBtn');
+            const stackedBtn = document.getElementById('stackedBtn');
+
+            if (mode === 'overlay') {
+                overlayBtn.classList.add('active');
+                stackedBtn.classList.remove('active');
+            } else {
+                stackedBtn.classList.add('active');
+                overlayBtn.classList.remove('active');
+            }
+
+            // 重新生成图表
+            const resultsDiv = document.getElementById('results');
+            if (resultsDiv.style.display !== 'none') {
+                const analysis = processRetakeData(correctedRetakeData);
+                generateRetakeChart(analysis);
+            }
+        }
+    </script>
+</body>
+</html>

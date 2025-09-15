@@ -1,0 +1,1700 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zora 统一流动性分析器</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(15, 13, 13, 0.1);
+        }
+
+        .input-section {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 25px;
+            margin-bottom: 30px;
+            border: 2px solid #e9ecef;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        .input-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #495057;
+        }
+
+        .input-group input, .input-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .input-group input:focus, .input-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .input-group textarea {
+            height: 120px;
+            resize: vertical;
+            font-family: 'Courier New', monospace;
+        }
+
+        .analyze-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .analyze-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .analyze-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .results-section {
+            display: none;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .current-price-info {
+            background: #fff3cd;
+            border: 2px solid #ffeaa7;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 25px;
+            text-align: center;
+        }
+
+        .current-price-info h3 {
+            color: #856404;
+            margin-bottom: 10px;
+        }
+
+        .legend {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 25px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+
+        .chart-controls {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .chart-controls button {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 0 5px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .chart-controls button.active {
+            background: #007bff;
+        }
+
+        /* Example buttons: larger and allow wrapping for long names */
+        .example-buttons { display: flex; flex-wrap: wrap; gap: 10px; }
+        .example-button {
+            padding: 12px 18px;
+            background: #1976d2;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 15px;
+            line-height: 1.25;
+            white-space: normal; /* allow wrapping */
+            min-width: 220px;    /* a bit wider to fit names */
+            max-width: 100%;
+            text-align: left;
+        }
+        .example-button:disabled { opacity: 0.7; cursor: default; }
+
+        .chart-container {
+            position: relative;
+            height: 500px;
+            margin-bottom: 30px;
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .stat-title {
+            font-size: 0.9em;
+            opacity: 0.9;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 1.4em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #f5c6cb;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔬 统一流动性分析器</h1>
+            <p>输入代币地址和配置数据，自动解析并可视化流动性分布</p>
+        </div>
+
+        <div class="input-section">
+            <div class="input-group">
+                <label for="tokenAddress">代币地址:</label>
+                <input type="text" id="tokenAddress" placeholder="0x..." />
+            </div>
+            
+            <div class="input-group">
+                <label for="zoraAddress">配对Token地址:</label>
+                <input type="text" id="zoraAddress" value="0x1111111111166b7fe7bd91427724b487980afc69" />
+            </div>
+
+            <div class="input-group">
+                <label for="configData">流动性配置数据 (JSON格式或十六进制数据):</label>
+                <textarea id="configData" placeholder='{"tickLower": [...], "tickUpper": [...], "numDiscoveryPositions": [...], "maxDiscoverySupplyShare": [...]}'></textarea>
+            </div>
+
+            <button class="analyze-btn" onclick="analyzeToken()">🚀 分析流动性</button>
+        </div>
+
+        <div id="errorMessage" class="error-message" style="display: none;"></div>
+        <div id="loading" class="loading" style="display: none;">正在分析中...</div>
+
+        <!-- 解析数据显示区域 -->
+        <div id="parsedDataSection" class="parsed-data-section" style="display: none; margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #007bff;">
+            <h3 style="margin-top: 0; color: #007bff;">📊 解析后的配置数据</h3>
+            <div id="parsedDataContent"></div>
+        </div>
+
+        <div id="results" class="results-section">
+            <!-- 结果将在这里动态生成 -->
+        </div>
+    </div>
+
+    <script>
+        let chart = null;
+
+        // 示例配置数据 (真实的十六进制数据)
+        const exampleConfigs = {
+            token1: {
+                address: "0xedca0842946ad36b66bf4194ea863a3140e7fc17",
+                name: "thechaingamer",
+                rawData: "0x00000000000000000000000000000000000000000000000000000000000000040000000000000000000000001111111111166b7fe7bd91427724b487980afc6900000000000000000000000000000000000000000000000000000000000000c0000000000000000000000000000000000000000000000000000000000000014000000000000000000000000000000000000000000000000000000000000001c000000000000000000000000000000000000000000000000000000000000002400000000000000000000000000000000000000000000000000000000000000003fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffee2d8fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffef278ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0dd00000000000000000000000000000000000000000000000000000000000000003ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff3abcffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff6488ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff64880000000000000000000000000000000000000000000000000000000000000003000000000000000000000000000000000000000000000000000000000000000b000000000000000000000000000000000000000000000000000000000000000b000000000000000000000000000000000000000000000000000000000000000b0000000000000000000000000000000000000000000000000000000000000003000000000000000000000000000000000000000000000000016345785d8a0000000000000000000000000000000000000000000000000000016345785d8a000000000000000000000000000000000000000000000000000000b1a2bc2ec50000",
+                type: "CreatorCoin"
+            },
+            token2: {
+                address: "0xd2969cc475a49e73182ae1c517add57db0f1c2ac",
+                name: "visualizevalue",
+                rawData: "0x00000000000000000000000000000000000000000000000000000000000000040000000000000000000000001111111111166b7fe7bd91427724b487980afc6900000000000000000000000000000000000000000000000000000000000000c0000000000000000000000000000000000000000000000000000000000000014000000000000000000000000000000000000000000000000000000000000001c000000000000000000000000000000000000000000000000000000000000002400000000000000000000000000000000000000000000000000000000000000003fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe6da8fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffea840fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffed7200000000000000000000000000000000000000000000000000000000000000003fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffedef0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffefe30fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffefe300000000000000000000000000000000000000000000000000000000000000003000000000000000000000000000000000000000000000000000000000000000b000000000000000000000000000000000000000000000000000000000000000b000000000000000000000000000000000000000000000000000000000000000b0000000000000000000000000000000000000000000000000000000000000003000000000000000000000000000000000000000000000000016345785d8a0000000000000000000000000000000000000000000000000000016345785d8a0000000000000000000000000000000000000000000000000000016345785d8a0000",
+                type: "CreatorCoin"
+            },
+            token3: {
+                address: "0x5186550f2e013a12572aaad4b5f29caf42fda0f2",
+                name: "Artifact002",
+                rawData: "0x0000000000000000000000000000000000000000000000000000000000000004000000000000000000000000d3a31119d2aebaf1a33b429261e5a01f79462b6200000000000000000000000000000000000000000000000000000000000000c00000000000000000000000000000000000000000000000000000000000000160000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000002a00000000000000000000000000000000000000000000000000000000000000004ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff2d10ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff8ad0ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff67a8fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffeb3f80000000000000000000000000000000000000000000000000000000000000004ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe4a80000000000000000000000000000000000000000000000000000000000001b580000000000000000000000000000000000000000000000000000000000001b580000000000000000000000000000000000000000000000000000000000001b580000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000b000000000000000000000000000000000000000000000000000000000000000b000000000000000000000000000000000000000000000000000000000000000b000000000000000000000000000000000000000000000000000000000000000b0000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000016345785d8a000000000000000000000000000000000000000000000000000002c68af0bb140000000000000000000000000000000000000000000000000000016345785d8a000000000000000000000000000000000000000000000000000000b1a2bc2ec50000",
+                type: "ContentCoin"
+            },
+            token4: {
+                address: "0xfe9ede4478ad200a2186175a81f9ce9f0e679270",
+                name: "propaganda",
+                rawData: "0x00000000000000000000000000000000000000000000000000000000000000040000000000000000000000001111111111166b7fe7bd91427724b487980afc6900000000000000000000000000000000000000000000000000000000000000c0000000000000000000000000000000000000000000000000000000000000014000000000000000000000000000000000000000000000000000000000000001c000000000000000000000000000000000000000000000000000000000000002400000000000000000000000000000000000000000000000000000000000000003fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe6da8fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffea840fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffed7200000000000000000000000000000000000000000000000000000000000000003fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffedef0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffefe30fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffefe300000000000000000000000000000000000000000000000000000000000000003000000000000000000000000000000000000000000000000000000000000000b000000000000000000000000000000000000000000000000000000000000000b000000000000000000000000000000000000000000000000000000000000000b0000000000000000000000000000000000000000000000000000000000000003000000000000000000000000000000000000000000000000016345785d8a0000000000000000000000000000000000000000000000000000016345785d8a0000000000000000000000000000000000000000000000000000016345785d8a0000",
+                type: "CreatorCoin"
+            },
+            token5: {
+                address: "0x7f35845e980b4064fa82c50e62cb9013fd27624c",
+                name: "175g1",
+                rawData: "0x00000000000000000000000000000000000000000000000000000000000000040000000000000000000000001111111111166b7fe7bd91427724b487980afc6900000000000000000000000000000000000000000000000000000000000000c0000000000000000000000000000000000000000000000000000000000000014000000000000000000000000000000000000000000000000000000000000001c000000000000000000000000000000000000000000000000000000000000002400000000000000000000000000000000000000000000000000000000000000003fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe6da8fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffea840fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffed7200000000000000000000000000000000000000000000000000000000000000003fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffedef0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffefe30fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffefe300000000000000000000000000000000000000000000000000000000000000003000000000000000000000000000000000000000000000000000000000000000b000000000000000000000000000000000000000000000000000000000000000b000000000000000000000000000000000000000000000000000000000000000b0000000000000000000000000000000000000000000000000000000000000003000000000000000000000000000000000000000000000000010a741a4627800000000000000000000000000000000000000000000000000001bc16d674ec8000000000000000000000000000000000000000000000000000026db992a3b18000",
+                type: "CreatorCoin"
+            },
+            token6: {
+                address: "0xd769d56f479e9e72a77bb1523e866a33098feec5",
+                name: "base is for everyone",
+                rawData: "0x00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc2f70fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffcf2c0000000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000b1a2bc2ec50000",
+                isV3: true,
+                type: "ContentCoin"
+            }
+        };
+
+        // 加载示例数据
+        function loadExample(tokenKey) {
+            const example = exampleConfigs[tokenKey];
+            document.getElementById('tokenAddress').value = example.address;
+            document.getElementById('configData').value = example.rawData;
+
+            // 根据代币类型设置配对地址
+            if (example.type === 'ContentCoin') {
+                // ContentCoin配对WETH或其他代币
+                if (example.isV3) {
+                    document.getElementById('zoraAddress').value = "0x4200000000000000000000000000000000000006"; // WETH on Base
+                } else {
+                    // V4 ContentCoin的配对地址从rawData中提取
+                    document.getElementById('zoraAddress').value = "0xd3a31119d2aebaf1a33b429261e5a01f79462b62";
+                }
+            } else {
+                // CreatorCoin配对ZORA代币
+                document.getElementById('zoraAddress').value = "0x1111111111166b7fe7bd91427724b487980afc69";
+            }
+        }
+
+        // 添加示例按钮到代币地址输入框之前（静态按钮，避免外部请求）
+        document.addEventListener('DOMContentLoaded', function() {
+            const inputSection = document.querySelector('.input-section');
+            const firstInputGroup = inputSection.querySelector('.input-group');
+
+            const exampleButtons = document.createElement('div');
+            exampleButtons.style.marginBottom = '20px';
+            exampleButtons.style.padding = '15px';
+            exampleButtons.style.background = '#e3f2fd';
+            exampleButtons.style.borderRadius = '8px';
+            exampleButtons.style.border = '1px solid #bbdefb';
+            exampleButtons.innerHTML = `
+                <p style="margin: 0 0 12px 0; font-weight: 600; color: #1976d2;">🚀 快速加载示例:</p>
+                
+                <!-- CreatorCoin 示例 -->
+                <div style="margin-bottom: 15px;">
+                    <h4 style="margin: 0 0 8px 0; color: #28a745; font-size: 14px;">👤 CreatorCoin (500M池子供应, 500M归属给创作者)</h4>
+                    <div class="example-buttons">
+                        <button onclick=\"loadExample('token1')\" class=\"example-button\" style=\"background:#28a745;\">thechaingamer</button>
+                        <button onclick=\"loadExample('token2')\" class=\"example-button\" style=\"background:#17a2b8;\">visualizevalue</button>
+                        <button onclick=\"loadExample('token4')\" class=\"example-button\" style=\"background:#e91e63;\">propaganda</button>
+                        <button onclick=\"loadExample('token5')\" class=\"example-button\" style=\"background:#ff9800;\">175g1</button>
+                    </div>
+                </div>
+                
+                <!-- ContentCoin 示例 -->
+                <div>
+                    <h4 style="margin: 0 0 8px 0; color: #dc3545; font-size: 14px;">🎨 ContentCoin (990M池子供应, 10M立即给创作者)</h4>
+                    <div class="example-buttons">
+                        <button onclick=\"loadExample('token3')\" class=\"example-button\" style=\"background:#6f42c1;\">Artifact002</button>
+                        <button onclick=\"loadExample('token6')\" class=\"example-button\" style=\"background:#607d8b;\">base is for everyone</button>
+                    </div>
+                </div>
+            `;
+
+            // 插入到第一个输入组之前
+            inputSection.insertBefore(exampleButtons, firstInputGroup);
+        });
+
+        // 主分析函数
+        async function analyzeToken() {
+            const tokenAddress = document.getElementById('tokenAddress').value.trim();
+            const zoraAddress = document.getElementById('zoraAddress').value.trim();
+            const configDataText = document.getElementById('configData').value.trim();
+
+            // 隐藏之前的结果和错误
+            document.getElementById('errorMessage').style.display = 'none';
+            document.getElementById('results').style.display = 'none';
+            
+            // 验证输入
+            if (!tokenAddress || !configDataText) {
+                showError('请填写代币地址和配置数据');
+                return;
+            }
+
+            if (!tokenAddress.startsWith('0x') || tokenAddress.length !== 42) {
+                showError('代币地址格式不正确');
+                return;
+            }
+
+            // 解析配置数据 (支持JSON和十六进制)
+            let configData;
+            try {
+                if (configDataText.trim().startsWith('{')) {
+                    // JSON格式
+                    configData = JSON.parse(configDataText);
+                    // 验证必需字段
+                    const requiredFields = ['tickLower', 'tickUpper', 'numDiscoveryPositions', 'maxDiscoverySupplyShare'];
+                    for (const field of requiredFields) {
+                        if (!configData[field]) {
+                            throw new Error(`缺少必需字段: ${field}`);
+                        }
+                    }
+                    console.log(configData)
+                } else if (configDataText.trim().startsWith('0x')) {
+                    // 十六进制格式
+                    configData = parsePoolConfigData(configDataText);
+                } else {
+                    throw new Error('不支持的数据格式，请使用JSON或十六进制格式');
+                }
+            } catch (e) {
+                showError('配置数据解析失败: ' + e.message);
+                return;
+            }
+
+            // 显示加载状态
+            document.getElementById('loading').style.display = 'block';
+            document.querySelector('.analyze-btn').disabled = true;
+
+            try {
+                // 分析配置数据
+                const analysis = analyzeConfiguration(tokenAddress, zoraAddress, configData);
+
+                // 显示解析后的数据
+                displayParsedData(analysis);
+
+                // 生成可视化
+                generateVisualization(analysis);
+
+                // 显示结果
+                document.getElementById('results').style.display = 'block';
+                
+            } catch (error) {
+                showError('分析过程中出错: ' + error.message);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+                document.querySelector('.analyze-btn').disabled = false;
+            }
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+
+        // 检测代币类型
+        function detectCoinType(tokenAddress, pairAddress, configData) {
+            // 根据已知的代币地址直接判断
+            const knownTokens = {
+                '0x5186550f2e013a12572aaad4b5f29caf42fda0f2': 'ContentCoin', // token3
+                '0xd769d56f479e9e72a77bb1523e866a33098feec5': 'ContentCoin', // token6
+            };
+            
+            const normalizedAddress = tokenAddress.toLowerCase();
+            if (knownTokens[normalizedAddress]) {
+                return {
+                    type: knownTokens[normalizedAddress],
+                    poolSupply: 990_000_000, // ContentCoin: 990M池子供应
+                    confidence: 'confirmed',
+                    reason: '已确认的ContentCoin地址'
+                };
+            }
+            
+            // 其余默认为CreatorCoin (根据你的确认)
+            return {
+                type: 'CreatorCoin',
+                poolSupply: 500_000_000, // CreatorCoin: 500M池子供应
+                confidence: 'confirmed', 
+                reason: '已确认的CreatorCoin地址'
+            };
+        }
+
+        // 分析配置数据的核心函数
+        function analyzeConfiguration(tokenAddress, zoraAddress, configData) {
+            // 检查是否是V3格式
+            if (configData.isV3) {
+                return analyzeV3Configuration(tokenAddress, configData, zoraAddress);
+            }
+
+            // 1. 首先确定代币类型
+            const coinTypeInfo = detectCoinType(tokenAddress, zoraAddress, configData);
+
+            // V4格式的处理逻辑
+            // 确定代币顺序
+            const isCoinToken0 = tokenAddress.toLowerCase() < zoraAddress.toLowerCase();
+
+            // 解析原始tick数据
+            let rawTickLower = configData.tickLower;
+            let rawTickUpper = configData.tickUpper;
+            const numPositions = configData.numDiscoveryPositions;
+            const supplyShares = configData.maxDiscoverySupplyShare.map(s => parseFloat(s));
+
+            // 应用setupPool转换逻辑 (如果isCoinToken0 = false)
+            let actualTickLower, actualTickUpper;
+            if (!isCoinToken0) {
+                // 对于第二个代币，需要应用转换: tickLower_[i] = -currentTickUpper, tickUpper_[i] = -currentTickLower
+                actualTickLower = rawTickUpper.map(tick => -tick);
+                actualTickUpper = rawTickLower.map(tick => -tick);
+            } else {
+                actualTickLower = rawTickLower;
+                actualTickUpper = rawTickUpper;
+            }
+
+            // 计算总供应量分配
+            const totalDiscoveryShare = supplyShares.reduce((sum, share) => sum + share, 0);
+            const tailShare = 1 - totalDiscoveryShare;
+
+            // 2. 使用正确的池子供应量
+            const poolSupply = coinTypeInfo.poolSupply;
+            const discoveryTokens = supplyShares.map(share => Math.round(poolSupply * share));
+            const tailTokens = Math.round(poolSupply * tailShare);
+
+            // 计算价格范围
+            const curves = [];
+            for (let i = 0; i < actualTickLower.length; i++) {
+                const lowerTick = actualTickLower[i];
+                const upperTick = actualTickUpper[i];
+
+                // 计算价格 (代币价格，以配对代币计价)
+                const price1 = tickToTokenPrice(lowerTick, isCoinToken0, getPriceUnit(zoraAddress));
+                const price2 = tickToTokenPrice(upperTick, isCoinToken0, getPriceUnit(zoraAddress));
+                const lowerPrice = Math.min(price1, price2);
+                const upperPrice = Math.max(price1, price2);
+
+                curves.push({
+                    index: i + 1,
+                    tickRange: [lowerTick, upperTick],
+                    priceRange: [lowerPrice, upperPrice],
+                    tokens: discoveryTokens[i],
+                    share: supplyShares[i],
+                    positions: numPositions[i]
+                });
+            }
+
+            // 找到初始价格 (最低价格)
+            const allPrices = curves.flatMap(c => c.priceRange);
+            const initialPrice = Math.min(...allPrices);
+            const maxPrice = Math.max(...allPrices);
+
+            return {
+                tokenAddress,
+                zoraAddress,
+                isCoinToken0,
+                coinType: coinTypeInfo.type,
+                isContentCoin: coinTypeInfo.type === 'ContentCoin',
+                poolSupply: coinTypeInfo.poolSupply,
+                confidence: coinTypeInfo.confidence,
+                detectionReason: coinTypeInfo.reason,
+                rawTickLower,
+                rawTickUpper,
+                actualTickLower,
+                actualTickUpper,
+                initialPrice,
+                maxPrice,
+                curves,
+                tailTokens,
+                tailShare,
+                totalDiscoveryShare,
+                priceUnit: getPriceUnit(zoraAddress)
+            };
+        }
+
+        // 根据配对地址获取价格单位
+        function getPriceUnit(pairAddress) {
+            const normalizedAddress = pairAddress.toLowerCase();
+            
+            // WETH (Base) 
+            if (normalizedAddress === '0x4200000000000000000000000000000000000006') {
+                return 'WETH';
+            }
+            
+            // ZORA代币
+            if (normalizedAddress === '0x1111111111166b7fe7bd91427724b487980afc69') {
+                return 'ZORA';
+            }
+            
+            // token3的特殊配对代币
+            if (normalizedAddress === '0xd3a31119d2aebaf1a33b429261e5a01f79462b62') {
+                return 'Token'; // 或者你知道具体是什么代币的话可以改成具体名称
+            }
+            
+            // 默认
+            return 'Token';
+        }
+
+        // tick到代币价格的转换函数 (支持不同配对)
+        function tickToTokenPrice(tick, isCoinToken0, pairTokenSymbol = 'ZORA') {
+            const uniswapPrice = Math.pow(1.0001, tick);
+            
+            if (isCoinToken0) {
+                // 代币是token0，价格 = token1/token0 (多少配对代币能买1个我们的代币)
+                return uniswapPrice;
+            } else {
+                // 代币是token1，价格 = token0/token1 (多少配对代币能买1个我们的代币)  
+                return 1 / uniswapPrice;
+            }
+        }
+
+        // 兼容性函数 (保持向后兼容)
+        function tickToCreatorCoinPrice(tick) {
+            // 默认假设CreatorCoin是token1，与ZORA配对
+            return tickToTokenPrice(tick, false, 'ZORA');
+        }
+
+        // 解析十六进制配置数据 (支持V3和V4格式)
+        function parsePoolConfigData(hexData) {
+            // 移除0x前缀
+            const cleanHex = hexData.replace(/^0x/, '');
+
+            // 验证十六进制格式
+            if (!/^[0-9a-fA-F]+$/.test(cleanHex)) {
+                throw new Error('无效的十六进制格式');
+            }
+
+            try {
+                // 辅助函数
+                function parseHex(hex, start, length) {
+                    return hex.slice(start * 2, (start + length) * 2);
+                }
+
+                function hexToInt(hex) {
+                    return parseInt(hex, 16);
+                }
+
+                function hexToSignedInt24(hex) {
+                    const value = parseInt(hex, 16);
+                    // 如果是负数 (最高位为1)
+                    if (value >= 0x800000) {
+                        return value - 0x1000000; // 2^24
+                    }
+                    return value;
+                }
+
+                // 检测版本
+                const version = hexToInt(parseHex(cleanHex, 0, 32));
+
+                if (version === 2) {
+                    // V3格式: (uint8, address, int24, int24, uint16, uint256)
+                    return parseV3PoolConfig(cleanHex);
+                } else if (version === 4) {
+                    // V4格式: (uint8, address, int24[], int24[], uint16[], uint256[])
+                    return parseV4PoolConfig(cleanHex);
+                } else {
+                    throw new Error(`不支持的版本: ${version}`);
+                }
+
+            } catch (e) {
+                throw new Error('解析配置数据时出错: ' + e.message);
+            }
+        }
+
+        // 解析V3格式的poolConfig
+        function parseV3PoolConfig(cleanHex) {
+            function parseHex(hex, start, length) {
+                return hex.slice(start * 2, (start + length) * 2);
+            }
+
+            function hexToInt(hex) {
+                return parseInt(hex, 16);
+            }
+
+            function hexToSignedInt24(hex) {
+                const value = parseInt(hex, 16);
+                if (value >= 0x800000) {
+                    return value - 0x1000000;
+                }
+                return value;
+            }
+
+            // V3格式: version(32) + currency(32) + tickLower(32) + tickUpper(32) + numPositions(32) + supplyShare(32)
+            const version = hexToInt(parseHex(cleanHex, 0, 32));
+            const currency = "0x" + parseHex(cleanHex, 32, 32).slice(24); // 取后20字节作为地址
+
+            // 正确解析有符号的24位整数 (tick值)
+            const tickLowerHex = parseHex(cleanHex, 64, 32);
+            const tickUpperHex = parseHex(cleanHex, 96, 32);
+
+            // 从32字节中提取最后3字节作为int24
+            const tickLower = hexToSignedInt24(tickLowerHex.slice(-6)); // 最后3字节 = 6个hex字符
+            const tickUpper = hexToSignedInt24(tickUpperHex.slice(-6));
+
+            const numPositions = hexToInt(parseHex(cleanHex, 128, 32));
+            const supplyShare = parseInt(parseHex(cleanHex, 160, 32), 16);
+
+            return {
+                version: version,
+                isV3: true,
+                currency: currency,
+                originalTickLower: tickLower,
+                originalTickUpper: tickUpper,
+                numDiscoveryPositions: numPositions,
+                discoverySupplyShare: (supplyShare / 1e18)
+            };
+        }
+
+        // 解析V4格式的poolConfig
+        function parseV4PoolConfig(cleanHex) {
+            function parseHex(hex, start, length) {
+                return hex.slice(start * 2, (start + length) * 2);
+            }
+
+            function hexToInt(hex) {
+                return parseInt(hex, 16);
+            }
+
+            // 解析数组偏移量 (完全按照second_coin_analysis.js的逻辑)
+            const tickLowerOffset = hexToInt(parseHex(cleanHex, 64, 32)) * 2;
+            const tickUpperOffset = hexToInt(parseHex(cleanHex, 96, 32)) * 2;
+            const numPositionsOffset = hexToInt(parseHex(cleanHex, 128, 32)) * 2;
+            const supplyShareOffset = hexToInt(parseHex(cleanHex, 160, 32)) * 2;
+
+            // 解析数组
+            const tickLower = parseArrayCorrect(cleanHex, tickLowerOffset / 2, true);
+            const tickUpper = parseArrayCorrect(cleanHex, tickUpperOffset / 2, true);
+            const numDiscoveryPositions = parseArrayCorrect(cleanHex, numPositionsOffset / 2, false);
+            const maxDiscoverySupplyShare = parseArrayCorrect(cleanHex, supplyShareOffset / 2, false);
+
+            return {
+                version: 4,
+                isV3: false,
+                tickLower,
+                tickUpper,
+                numDiscoveryPositions,
+                maxDiscoverySupplyShare: maxDiscoverySupplyShare.map(val => (val / 1e18).toString())
+            };
+        }
+
+        // 生成V3的发现位置分布 (模拟calculateLogNormalDistribution)
+        function generateV3DiscoveryPositions(tickLower, tickUpper, numPositions) {
+            const positions = [];
+            const spread = tickUpper - tickLower;
+            const totalSupplyShare = 0.05; // V3版本固定5%用于发现
+            const supplyPerPosition = totalSupplyShare / numPositions;
+
+            for (let i = 0; i < numPositions; i++) {
+                // 计算每个位置的起始tick (均匀分布)
+                const startingTick = tickLower + Math.floor((i * spread) / numPositions);
+                const endingTick = tickUpper; // 所有位置都延伸到tickUpper
+
+                positions.push({
+                    tickLower: startingTick,
+                    tickUpper: endingTick,
+                    supplyShare: supplyPerPosition * 1e18 // 转换为wei
+                });
+            }
+
+            // 添加尾部位置 (从tickUpper到最大tick，包含95%供应)
+            positions.push({
+                tickLower: tickUpper,
+                tickUpper: 887272, // TickMath.MAX_TICK
+                supplyShare: 0.95 * 1e18, // 95%供应给尾部
+                isTail: true
+            });
+
+            return positions;
+        }
+
+        // 分析V3配置数据
+        function analyzeV3Configuration(tokenAddress, configData, pairAddress) {
+            // 1. 首先确定代币类型 
+            const coinTypeInfo = detectCoinType(tokenAddress, pairAddress, configData);
+            
+            // V3示例配对为WETH(Base)
+            const wethAddress = pairAddress || "0x4200000000000000000000000000000000000006";
+            const isCoinToken0 = tokenAddress.toLowerCase() < wethAddress.toLowerCase();
+
+            // 获取原始tick数据
+            const originalTickLower = configData.originalTickLower;
+            const originalTickUpper = configData.originalTickUpper;
+            const numDiscoveryPositions = configData.numDiscoveryPositions;
+            const discoverySupplyShare = configData.discoverySupplyShare;
+
+            // 应用tick翻转逻辑 (V3版本也需要根据代币顺序翻转)
+            let actualTickLower, actualTickUpper;
+            if (!isCoinToken0) {
+                // 代币是token1，需要翻转
+                actualTickLower = -originalTickUpper;
+                actualTickUpper = -originalTickLower;
+            } else {
+                actualTickLower = originalTickLower;
+                actualTickUpper = originalTickUpper;
+            }
+
+            // 生成V3的位置分布
+            const v3Positions = generateV3DiscoveryPositions(actualTickLower, actualTickUpper, numDiscoveryPositions);
+
+            // 2. 根据代币类型使用正确的供应量
+            const totalSupply = coinTypeInfo.type === 'ContentCoin' ? 1000000000 : 1000000000; // 总供应都是1B
+            const poolSupply = coinTypeInfo.poolSupply; // ContentCoin: 990M, CreatorCoin: 500M
+
+            // 转换为V4兼容的曲线格式 (1条曲线包含10个位置)
+            const curves = [];
+
+            // 计算整体的tick和价格范围
+            const allTickLower = v3Positions.slice(0, numDiscoveryPositions).map(p => p.tickLower);
+            const allTickUpper = v3Positions.slice(0, numDiscoveryPositions).map(p => p.tickUpper);
+            const discoveryPrices = v3Positions.slice(0, numDiscoveryPositions).flatMap(p => [
+                tickToTokenPrice(p.tickUpper, isCoinToken0, getPriceUnit(wethAddress)), // 高tick对应低价格
+                tickToTokenPrice(p.tickLower, isCoinToken0, getPriceUnit(wethAddress))  // 低tick对应高价格
+            ]);
+
+            const totalDiscoveryTokens = numDiscoveryPositions * Math.round(poolSupply * (v3Positions[0].supplyShare / 1e18));
+
+            // 创建单条曲线包含所有发现位置
+            curves.push({
+                index: 1,
+                tickRange: [Math.min(...allTickLower), Math.max(...allTickUpper)],
+                priceRange: [Math.min(...discoveryPrices), Math.max(...discoveryPrices)],
+                tokens: totalDiscoveryTokens,
+                share: discoverySupplyShare,
+                positions: numDiscoveryPositions,
+                isV3Discovery: true
+            });
+
+            // 尾部位置
+            const tailPos = v3Positions[v3Positions.length - 1];
+            const tailTokens = Math.round(poolSupply * (tailPos.supplyShare / 1e18));
+
+            // 计算价格范围
+            const allPrices = curves.flatMap(c => c.priceRange);
+            const initialPrice = Math.min(...allPrices);
+            const maxPrice = Math.max(...allPrices);
+
+            return {
+                tokenAddress,
+                zoraAddress: wethAddress,
+                isCoinToken0,
+                isV3: true,
+                coinType: coinTypeInfo.type,
+                isContentCoin: coinTypeInfo.type === 'ContentCoin',
+                poolSupply: coinTypeInfo.poolSupply,
+                confidence: coinTypeInfo.confidence,
+                detectionReason: coinTypeInfo.reason,
+                rawTickLower: [originalTickLower],
+                rawTickUpper: [originalTickUpper],
+                actualTickLower: [actualTickLower],
+                actualTickUpper: [actualTickUpper],
+                initialPrice,
+                maxPrice,
+                curves,
+                tailTokens,
+                tailShare: tailPos.supplyShare / 1e18,
+                totalSupply,
+                poolSupply,
+                numDiscoveryPositions,
+                discoverySupplyShare,
+                version: coinTypeInfo.type + ' V3',
+                pairInfo: coinTypeInfo.type + '/WETH',
+                priceUnit: getPriceUnit(wethAddress)
+            };
+        }
+
+        // 正确的数组解析函数 (基于second_coin_analysis.js)
+        function parseArrayCorrect(hexData, byteOffset, signed = false) {
+            // 辅助函数
+            function parseHex(hex, start, length) {
+                return hex.slice(start * 2, (start + length) * 2);
+            }
+
+            function hexToSignedInt24(hex) {
+                const value = BigInt("0x" + hex);
+                if (value >= BigInt("0x8000000000000000000000000000000000000000000000000000000000000000")) {
+                    return Number(value - BigInt("0x10000000000000000000000000000000000000000000000000000000000000000"));
+                }
+                return Number(value);
+            }
+
+            // 读取数组长度
+            const length = parseInt(parseHex(hexData, byteOffset, 32), 16);
+
+            if (length === 0 || length > 10) {
+                throw new Error(`数组长度异常: ${length}`);
+            }
+
+            const result = [];
+            for (let i = 0; i < length; i++) {
+                const hex = parseHex(hexData, byteOffset + 32 + i * 32, 32);
+
+                if (signed) {
+                    result.push(hexToSignedInt24(hex));
+                } else {
+                    result.push(parseInt(hex, 16));
+                }
+            }
+
+            return result;
+        }
+
+        // 生成可视化
+        function generateVisualization(analysis) {
+            const resultsDiv = document.getElementById('results');
+
+            // 检测V3格式并使用不同的单位和格式
+            const priceUnit = analysis.priceUnit || (analysis.isV3 ? 'ETH' : 'ZORA');
+            const formatPrice = (price) => {
+                return analysis.isV3 ? price.toExponential(3) : price.toFixed(6);
+            };
+
+            // 生成HTML结构
+            resultsDiv.innerHTML = `
+                <div class="current-price-info">
+                    <h3>🎯 分析结果</h3>
+                    <p>代币地址: ${analysis.tokenAddress}</p>
+                    <p>代币类型: <strong style="color: ${analysis.coinType === 'ContentCoin' ? '#dc3545' : '#28a745'};">${analysis.coinType}</strong> ${analysis.confidence ? '(' + analysis.confidence + ')' : ''}</p>
+                    <p>池子供应量: <strong>${(analysis.poolSupply / 1000000).toFixed(0)}M</strong> 代币</p>
+                    <p>供应分配: ${analysis.coinType === 'ContentCoin' ? 
+                        '990M池子 + 10M创作者(立即)' : 
+                        '500M池子 + 500M创作者(5年归属)'}</p>
+                    <p>配对Token: ${priceUnit}</p>
+                    <p>版本: ${analysis.isV3 ? analysis.version : 'V4 (Doppler MultiCurve)'}</p>
+                    <p>代币顺序: ${analysis.isCoinToken0 ? analysis.coinType + '是token0' : analysis.coinType + '是token1'}</p>
+                    <p>初始价格: 1个${analysis.coinType} = ${formatPrice(analysis.initialPrice)} ${priceUnit}</p>
+                    <p>价格范围: ${formatPrice(analysis.initialPrice)} - ${formatPrice(analysis.maxPrice)} ${priceUnit}</p>
+                    ${!analysis.isCoinToken0 ? '<p style="color: #856404;">⚠️ 已应用第二个代币的tick转换逻辑</p>' : ''}
+                    ${analysis.detectionReason ? '<p style="color: #666; font-size: 0.9em;">检测依据: ' + analysis.detectionReason + '</p>' : ''}
+                </div>
+
+                <div class="legend">
+                    ${analysis.curves.map((curve, i) => `
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: ${getCurveColor(i)};"></div>
+                            <span>曲线${curve.index} (${(curve.share * 100).toFixed(1)}%)</span>
+                        </div>
+                    `).join('')}
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #96ceb4;"></div>
+                        <span>尾部位置 (${(analysis.tailShare * 100).toFixed(1)}%)</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #feca57;"></div>
+                        <span>初始价格位置</span>
+                    </div>
+                </div>
+
+                <div class="chart-controls">
+                    <button id="overlayBtn" class="active" onclick="switchChartMode('overlay')">重叠视图</button>
+                    <button id="stackedBtn" onclick="switchChartMode('stacked')">堆叠视图</button>
+                    ${analysis.isV3 ? '<button id="discoveryBtn" onclick="switchChartMode(\'discovery\')">发现位置专用</button>' : ''}
+                </div>
+
+                <div class="chart-container">
+                    <canvas id="liquidityChart"></canvas>
+                    ${analysis.isV3 ? '<p style="font-size: 12px; color: #666; text-align: center; margin-top: 5px;">📊 为了更好地显示发现位置，尾部位置的图表高度已调整。实际数量请查看工具提示。</p>' : ''}
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-title">发现曲线总计</div>
+                        <div class="stat-value">${analysis.isV3 ?
+                            (analysis.poolSupply * analysis.discoverySupplyShare / 1000000).toFixed(1) :
+                            (analysis.poolSupply * analysis.totalDiscoveryShare / 1000000).toFixed(1)
+                        }M 代币 (${analysis.isV3 ?
+                            (analysis.discoverySupplyShare * 100).toFixed(1) :
+                            (analysis.totalDiscoveryShare * 100).toFixed(1)
+                        }%)</div>
+                        <div>${analysis.curves.reduce((sum, c) => sum + c.positions, 0)}个位置</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">尾部位置</div>
+                        <div class="stat-value">${(analysis.tailTokens / 1000000).toFixed(1)}M 代币 (${(analysis.tailShare * 100).toFixed(1)}%)</div>
+                        <div>1个位置</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">初始价格</div>
+                        <div class="stat-value">${analysis.isV3 ?
+                            analysis.initialPrice.toExponential(3) :
+                            analysis.initialPrice.toFixed(6)
+                        } ${analysis.priceUnit || (analysis.isV3 ? 'ETH' : 'ZORA')}</div>
+                        <div>${analysis.coinType}的最低起始价格</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-title">价格覆盖范围</div>
+                        <div class="stat-value">${analysis.isV3 ?
+                            analysis.initialPrice.toExponential(3) :
+                            analysis.initialPrice.toFixed(6)
+                        } - ∞ ${analysis.priceUnit || (analysis.isV3 ? 'ETH' : 'ZORA')}</div>
+                        <div>主要交易区间: ${analysis.isV3 ?
+                            analysis.initialPrice.toExponential(3) + ' - ' + analysis.maxPrice.toExponential(3) :
+                            analysis.initialPrice.toFixed(6) + ' - ' + analysis.maxPrice.toFixed(6)
+                        } ${analysis.priceUnit || (analysis.isV3 ? 'ETH' : 'ZORA')}</div>
+                    </div>
+                </div>
+
+                <div class="position-details">
+                    <h3>📊 详细位置分布</h3>
+                    ${analysis.isV3 ? generateV3DetailedPositions(analysis) : generateDetailedPositions(analysis)}
+
+                    <div class="curve-section" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                        <div class="curve-title" style="color: #96ceb4; font-weight: bold; margin-bottom: 10px;">
+                            🟤 尾部位置 - 极高价保护 (${(analysis.tailTokens / 1000000).toFixed(1)}M代币, ${(analysis.tailShare * 100).toFixed(1)}%)
+                        </div>
+                        <p>价格范围: [${analysis.isV3 ?
+                            analysis.maxPrice.toExponential(3) + '+ ' + (analysis.priceUnit || 'ETH') :
+                            analysis.maxPrice.toFixed(6) + '+ ' + (analysis.priceUnit || 'ZORA')
+                        }] | 保护价格不会过度上涨</p>
+                        <div style="margin-top: 10px; padding: 10px; background: #e9ecef; border-radius: 5px;">
+                            <strong>位置${analysis.curves.reduce((sum, c) => sum + c.positions, 0) + 1}:</strong> ${(analysis.tailTokens / 1000000).toFixed(1)}M 代币<br>
+                            密度: ${Math.round(analysis.tailTokens / 1000000)} 代币/tick | 覆盖范围: 极高价格保护
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // 生成图表 (V3和V4都使用相同的逻辑)
+            generateChart(analysis);
+        }
+
+        // 获取曲线颜色
+        function getCurveColor(index) {
+            const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#feca57'];
+            return colors[index % colors.length];
+        }
+
+        // 生成V3详细位置信息
+        function generateV3DetailedPositions(analysis) {
+            let positionCounter = 1;
+
+            return analysis.curves.map((curve, curveIndex) => {
+                const positionItems = `
+                    <div class="position-item" style="margin: 8px 0; padding: 10px; background: #e9ecef; border-radius: 5px; border-left: 4px solid ${getCurveColor(curveIndex)};">
+                        <strong>位置${positionCounter++}:</strong> ${(curve.tokens / 1000000).toFixed(1)}M 代币<br>
+                        Tick范围: [${curve.tickRange[0].toLocaleString()}, ${curve.tickRange[1].toLocaleString()}] |
+                        价格范围: [${curve.priceRange[0].toExponential(3)}, ${curve.priceRange[1].toExponential(3)}] ${analysis.priceUnit || (analysis.isV3 ? 'ETH' : 'ZORA')}<br>
+                        密度: ${Math.round(curve.tokens / (curve.tickRange[1] - curve.tickRange[0]))} 代币/tick |
+                        宽度: ${(curve.tickRange[1] - curve.tickRange[0]).toLocaleString()} ticks
+                    </div>
+                `;
+
+                return `
+                    <div class="curve-section" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                        <div class="curve-title" style="color: ${getCurveColor(curveIndex)}; font-weight: bold; margin-bottom: 10px;">
+                            ${getCurveIcon(curveIndex)} 曲线${curve.index} - ${getCurveLabel(curveIndex)} (${(curve.tokens / 1000000).toFixed(1)}M代币, ${(curve.share * 100).toFixed(1)}%)
+                        </div>
+                        <p style="margin-bottom: 15px;">
+                            总Tick范围: [${curve.tickRange[0].toLocaleString()} - ${curve.tickRange[1].toLocaleString()}] |
+                            总价格范围: [${curve.priceRange[0].toExponential(3)} - ${curve.priceRange[1].toExponential(3)}] ${analysis.priceUnit || (analysis.isV3 ? 'ETH' : 'ZORA')}
+                        </p>
+                        <div class="positions-grid">
+                            ${positionItems}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 生成详细位置信息
+        function generateDetailedPositions(analysis) {
+            let positionCounter = 1;
+
+            return analysis.curves.map((curve, curveIndex) => {
+                // 计算每个位置的详细信息
+                const positions = generateCurvePositions(curve, analysis.rawTickLower, analysis.rawTickUpper, curveIndex, analysis.isCoinToken0, analysis.priceUnit);
+
+                const positionItems = positions.map((pos, posIndex) => {
+                    const currentPosition = positionCounter++;
+                    return `
+                        <div class="position-item" style="margin: 8px 0; padding: 10px; background: #e9ecef; border-radius: 5px; border-left: 4px solid ${getCurveColor(curveIndex)};">
+                            <strong>位置${currentPosition}:</strong> ${(pos.tokens / 1000000).toFixed(1)}M 代币<br>
+                            Tick范围: [${pos.tickLower.toLocaleString()}, ${pos.tickUpper.toLocaleString()}] |
+                            价格范围: [${pos.priceLower.toFixed(6)}, ${pos.priceUpper.toFixed(6)}] ZORA<br>
+                            密度: ${Math.round(pos.tokens / (pos.tickUpper - pos.tickLower))} 代币/tick |
+                            宽度: ${(pos.tickUpper - pos.tickLower).toLocaleString()} ticks
+                        </div>
+                    `;
+                }).join('');
+
+                return `
+                    <div class="curve-section" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                        <div class="curve-title" style="color: ${getCurveColor(curveIndex)}; font-weight: bold; margin-bottom: 10px;">
+                            ${getCurveIcon(curveIndex)} 曲线${curve.index} - ${getCurveLabel(curveIndex)} (${(curve.tokens / 1000000).toFixed(1)}M代币, ${(curve.share * 100).toFixed(1)}%)
+                        </div>
+                        <p style="margin-bottom: 15px;">
+                            总Tick范围: [${curve.tickRange[0].toLocaleString()} - ${curve.tickRange[1].toLocaleString()}] |
+                            总价格范围: [${curve.priceRange[0].toFixed(6)} - ${curve.priceRange[1].toFixed(6)}] ZORA
+                        </p>
+                        <div class="positions-grid">
+                            ${positionItems}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 生成曲线的各个位置 (按照Doppler算法的正确逻辑)
+        function generateCurvePositions(curve, rawTickLower, rawTickUpper, curveIndex, isCoinToken0, priceUnit = 'ZORA') {
+            const positions = [];
+            const tokensPerPosition = curve.tokens / curve.positions;
+
+            // 获取原始tick数据
+            const originalLowerTick = rawTickLower[curveIndex];
+            const originalUpperTick = rawTickUpper[curveIndex];
+
+            // 应用转换逻辑得到实际的tick范围
+            let actualLowerTick, actualUpperTick;
+            if (!isCoinToken0) {
+                actualLowerTick = -originalUpperTick;
+                actualUpperTick = -originalLowerTick;
+            } else {
+                actualLowerTick = originalLowerTick;
+                actualUpperTick = originalUpperTick;
+            }
+
+            // 按照Doppler算法确定边界逻辑
+            // 基于DopplerMath.sol的calculateLogNormalDistribution函数
+            // 
+            // 算法逻辑：
+            // - isCoinToken0 = true: 位置从下往上延伸，都到达上边界 (actualUpperTick)
+            // - isCoinToken0 = false: 位置从上往下延伸，都到达下边界 (actualLowerTick)
+            //
+            const farTick = isCoinToken0 ? actualUpperTick : actualLowerTick;
+            const closeTick = isCoinToken0 ? actualLowerTick : actualUpperTick;
+            const spread = actualUpperTick - actualLowerTick;
+
+            for (let i = 0; i < curve.positions; i++) {
+                // 计算起始tick (按照Doppler的算法)
+                const startingTick = isCoinToken0
+                    ? closeTick + Math.round((i * spread) / curve.positions)
+                    : closeTick - Math.round((i * spread) / curve.positions);
+                
+                // 每个位置都从起始tick延伸到far tick
+                let posLowerTick, posUpperTick;
+                if (startingTick < farTick) {
+                    posLowerTick = startingTick;
+                    posUpperTick = farTick;
+                } else {
+                    posLowerTick = farTick;
+                    posUpperTick = startingTick;
+                }
+
+                const posPrice1 = tickToTokenPrice(posLowerTick, isCoinToken0, priceUnit);
+                const posPrice2 = tickToTokenPrice(posUpperTick, isCoinToken0, priceUnit);
+                
+                positions.push({
+                    tickLower: Math.round(posLowerTick),
+                    tickUpper: Math.round(posUpperTick),
+                    priceLower: Math.min(posPrice1, posPrice2),
+                    priceUpper: Math.max(posPrice1, posPrice2),
+                    tokens: Math.round(tokensPerPosition)
+                });
+            }
+
+            return positions;
+        }
+
+        // 获取曲线图标
+        function getCurveIcon(index) {
+            const icons = ['🔴', '🟢', '🔵', '🟡', '🟣'];
+            return icons[index % icons.length];
+        }
+
+        // 获取曲线标签
+        function getCurveLabel(index) {
+            const labels = ['低价区间', '中价区间', '高价区间', '超高价区间', '极高价区间'];
+            return labels[index % labels.length];
+        }
+
+        // 显示解析后的数据
+        function displayParsedData(analysis) {
+            const section = document.getElementById('parsedDataSection');
+            const content = document.getElementById('parsedDataContent');
+
+            // 检测V3格式并使用不同的显示逻辑
+            if (analysis.isV3) {
+                displayV3ParsedData(analysis, content);
+            } else {
+                displayV4ParsedData(analysis, content);
+            }
+
+            section.style.display = 'block';
+        }
+
+        // 显示V3解析数据
+        function displayV3ParsedData(analysis, content) {
+            const html = `
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                    <div>
+                        <h4 style="color: #495057; margin-bottom: 10px;">🏷️ 基本信息</h4>
+                        <div style="background: white; padding: 15px; border-radius: 5px; border: 1px solid #dee2e6;">
+                            <p><strong>代币类型:</strong> ContentCoin</p>
+                            <p><strong>代币地址:</strong> <code>${analysis.tokenAddress}</code></p>
+                            <p><strong>配对Token:</strong> ${analysis.priceUnit || 'WETH'} (<code>${analysis.zoraAddress}</code>)</p>
+                            <p><strong>版本:</strong> ${analysis.version}</p>
+                            <p><strong>代币顺序:</strong> ${analysis.isCoinToken0 ? 'ContentCoin是token0' : 'ContentCoin是token1'}</p>
+                            <p><strong>发现位置数量:</strong> ${analysis.numDiscoveryPositions}个</p>
+                            <p><strong>总供应量:</strong> ${(analysis.totalSupply / 1000000).toFixed(0)}M 代币</p>
+                            <p><strong>流动性池供应:</strong> ${(analysis.poolSupply / 1000000).toFixed(0)}M 代币</p>
+                            <p><strong>创作者奖励:</strong> ${((analysis.totalSupply - analysis.poolSupply) / 1000000).toFixed(0)}M 代币</p>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 style="color: #495057; margin-bottom: 10px;">💰 价格信息</h4>
+                        <div style="background: white; padding: 15px; border-radius: 5px; border: 1px solid #dee2e6;">
+                            <p><strong>初始价格:</strong> ${analysis.initialPrice.toExponential(3)} ${analysis.priceUnit || (analysis.isV3 ? 'ETH' : 'ZORA')}</p>
+                            <p><strong>最高价格:</strong> ${analysis.maxPrice.toExponential(3)} ${analysis.priceUnit || (analysis.isV3 ? 'ETH' : 'ZORA')}</p>
+                            <p><strong>价格范围:</strong> ${(analysis.maxPrice / analysis.initialPrice).toFixed(1)}x</p>
+                            <p><strong>发现区域:</strong> ${(analysis.discoverySupplyShare * 100).toFixed(1)}% (${(analysis.poolSupply * analysis.discoverySupplyShare / 1000000).toFixed(1)}M 代币)</p>
+                            <p><strong>尾部区域:</strong> ${(analysis.tailShare * 100).toFixed(1)}% (${(analysis.tailTokens / 1000000).toFixed(1)}M 代币)</p>
+                        </div>
+                    </div>
+                </div>
+
+                <h4 style="color: #495057; margin-bottom: 15px;">📈 V3配置数据</h4>
+                <div style="background: white; padding: 15px; border-radius: 5px; border: 1px solid #dee2e6; margin-bottom: 20px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div>
+                            <p><strong>原始Tick范围:</strong></p>
+                            <code style="display: block; background: #f8f9fa; padding: 10px; border-radius: 3px; font-size: 12px;">
+                                [${analysis.rawTickLower[0]}, ${analysis.rawTickUpper[0]}]
+                            </code>
+                        </div>
+                        <div>
+                            <p><strong>转换后Tick范围:</strong></p>
+                            <code style="display: block; background: #f8f9fa; padding: 10px; border-radius: 3px; font-size: 12px;">
+                                [${analysis.actualTickLower[0]}, ${analysis.actualTickUpper[0]}]
+                            </code>
+                        </div>
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <p><strong>转换说明:</strong> ${analysis.isCoinToken0 ? '无需转换' : '已应用tick翻转 (ContentCoin是token1)'}</p>
+                    </div>
+                </div>
+
+                <h4 style="color: #495057; margin-bottom: 15px;">📊 V3位置分布详情</h4>
+                ${generateV3CurveDetails(analysis)}
+            `;
+            content.innerHTML = html;
+        }
+
+        // 显示V4解析数据
+        function displayV4ParsedData(analysis, content) {
+            const html = `
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                    <div>
+                        <h4 style="color: #495057; margin-bottom: 10px;">🏷️ 基本信息</h4>
+                        <div style="background: white; padding: 15px; border-radius: 5px; border: 1px solid #dee2e6;">
+                            <p><strong>代币类型:</strong> <span style="color: ${analysis.coinType === 'ContentCoin' ? '#dc3545' : '#28a745'};">${analysis.coinType}</span></p>
+                            <p><strong>池子供应量:</strong> ${(analysis.poolSupply / 1000000).toFixed(0)}M 代币</p>
+                            <p><strong>代币地址:</strong> <code>${analysis.tokenAddress}</code></p>
+                            <p><strong>配对Token地址:</strong> <code>${analysis.zoraAddress}</code></p>
+                            <p><strong>代币顺序:</strong> ${analysis.isCoinToken0 ? analysis.coinType + '是token0' : analysis.coinType + '是token1'}</p>
+                            <p><strong>发现曲线数量:</strong> ${analysis.curves.length}条</p>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 style="color: #495057; margin-bottom: 10px;">💰 价格信息</h4>
+                        <div style="background: white; padding: 15px; border-radius: 5px; border: 1px solid #dee2e6;">
+                            <p><strong>初始价格:</strong> ${analysis.initialPrice.toFixed(6)} ZORA</p>
+                            <p><strong>最高价格:</strong> ${analysis.maxPrice.toFixed(6)} ZORA</p>
+                            <p><strong>价格范围:</strong> ${(analysis.maxPrice / analysis.initialPrice).toFixed(1)}x</p>
+                            <p><strong>尾部代币:</strong> ${(analysis.tailTokens / 1000000).toFixed(1)}M (${(analysis.tailShare * 100).toFixed(1)}%)</p>
+                        </div>
+                    </div>
+                </div>
+
+                <h4 style="color: #495057; margin-bottom: 15px;">📈 原始Tick数据</h4>
+                <div style="background: white; padding: 15px; border-radius: 5px; border: 1px solid #dee2e6; margin-bottom: 20px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div>
+                            <p><strong>原始tickLower:</strong></p>
+                            <code style="display: block; background: #f8f9fa; padding: 10px; border-radius: 3px; font-size: 12px;">
+                                [${analysis.rawTickLower.join(', ')}]
+                            </code>
+                        </div>
+                        <div>
+                            <p><strong>原始tickUpper:</strong></p>
+                            <code style="display: block; background: #f8f9fa; padding: 10px; border-radius: 3px; font-size: 12px;">
+                                [${analysis.rawTickUpper.join(', ')}]
+                            </code>
+                        </div>
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                            <div>
+                                <p><strong>转换后tickLower:</strong></p>
+                                <code style="display: block; background: #e3f2fd; padding: 10px; border-radius: 3px; font-size: 12px;">
+                                    [${analysis.actualTickLower.join(', ')}]
+                                </code>
+                            </div>
+                            <div>
+                                <p><strong>转换后tickUpper:</strong></p>
+                                <code style="display: block; background: #e3f2fd; padding: 10px; border-radius: 3px; font-size: 12px;">
+                                    [${analysis.actualTickUpper.join(', ')}]
+                                </code>
+                            </div>
+                        </div>
+                        <p style="margin-top: 10px;"><strong>转换说明:</strong> ${analysis.isCoinToken0 ? '无需转换' : '已应用tick翻转 (CreatorCoin是token1)'}</p>
+                    </div>
+                </div>
+
+                <h4 style="color: #495057; margin-bottom: 15px;">📊 发现曲线详情</h4>
+                ${generateCurveDetails(analysis)}
+            `;
+            content.innerHTML = html;
+        }
+
+        // 生成V3曲线详情
+        function generateV3CurveDetails(analysis) {
+            let html = '<div style="background: white; padding: 15px; border-radius: 5px; border: 1px solid #dee2e6;">';
+
+            // 发现位置
+            html += '<h5 style="color: #28a745; margin-bottom: 10px;">🔍 发现位置</h5>';
+            analysis.curves.forEach((curve, index) => {
+                if (curve.isV3Discovery) {
+                    html += `
+                        <div style="background: #f8f9fa; padding: 10px; margin-bottom: 10px; border-radius: 3px; border-left: 4px solid #28a745;">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+                                <div>
+                                    <strong>位置 ${curve.index}</strong><br>
+                                    Tick: [${curve.tickRange[0]}, ${curve.tickRange[1]}]
+                                </div>
+                                <div>
+                                    价格: ${curve.priceRange[0].toExponential(3)} - ${curve.priceRange[1].toExponential(3)} ${analysis.priceUnit || (analysis.isV3 ? 'ETH' : 'ZORA')}
+                                </div>
+                                <div>
+                                    代币: ${(curve.tokens / 1000000).toFixed(1)}M 代币 (${(curve.share * 100).toFixed(2)}%)
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+            });
+
+            // 尾部位置
+            html += '<h5 style="color: #dc3545; margin-top: 20px; margin-bottom: 10px;">🎯 尾部位置</h5>';
+            html += `
+                <div style="background: #fff3cd; padding: 10px; border-radius: 3px; border-left: 4px solid #dc3545;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div>
+                            <strong>尾部区域</strong><br>
+                            从 tick ${analysis.actualTickUpper[0]} 延伸到最大tick
+                        </div>
+                        <div>
+                            代币: ${(analysis.tailTokens / 1000000).toFixed(1)}M 代币 (${(analysis.tailShare * 100).toFixed(1)}%)
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            html += '</div>';
+            return html;
+        }
+
+        // 生成V4曲线详情
+        function generateCurveDetails(analysis) {
+            let html = '<div style="background: white; padding: 15px; border-radius: 5px; border: 1px solid #dee2e6;">';
+
+            analysis.curves.forEach((curve, index) => {
+                html += `
+                    <div style="margin-bottom: 15px; padding: 12px; background: #f8f9fa; border-radius: 5px; border-left: 4px solid ${getCurveColor(index)};">
+                        <h5 style="margin: 0 0 8px 0; color: ${getCurveColor(index)};">
+                            ${getCurveIcon(index)} 曲线${curve.index} - ${getCurveLabel(index)}
+                        </h5>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; font-size: 14px;">
+                            <div>
+                                <strong>Tick范围:</strong><br>
+                                [${curve.tickRange[0].toLocaleString()}, ${curve.tickRange[1].toLocaleString()}]
+                            </div>
+                            <div>
+                                <strong>价格范围:</strong><br>
+                                [${curve.priceRange[0].toFixed(6)}, ${curve.priceRange[1].toFixed(6)}] ZORA
+                            </div>
+                            <div>
+                                <strong>代币分配:</strong><br>
+                                ${(curve.tokens / 1000000).toFixed(1)}M (${(curve.share * 100).toFixed(1)}%) | ${curve.positions}个位置
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+            return html;
+        }
+
+
+        // 创建分层的流动性数据 (使用矩形显示，支持堆叠)
+        // 关键修复：所有数据集使用统一的x轴价格点，确保堆叠模式正常工作
+        function createLayeredLiquidityData(analysis) {
+            // 计算实际的价格范围
+            const allPrices = analysis.curves.flatMap(c => c.priceRange);
+            const minPrice = Math.min(...allPrices);
+            const maxPrice = Math.max(...allPrices);
+
+            // 计算尾部位置的价格范围
+            const tailStartPrice = maxPrice;
+            const tailEndPrice = maxPrice * 10;
+
+            // 收集所有曲线的位置数据
+            const allCurvePositions = {};
+            analysis.curves.forEach((curve, curveIndex) => {
+                const positions = generateCurvePositions(curve, analysis.rawTickLower, analysis.rawTickUpper, curveIndex, analysis.isCoinToken0, analysis.priceUnit);
+                allCurvePositions[`curve${curveIndex + 1}`] = positions;
+            });
+
+            // 收集所有价格边界点（来自所有曲线）
+            const allPricePoints = new Set();
+            Object.values(allCurvePositions).forEach(positions => {
+                positions.forEach(pos => {
+                    allPricePoints.add(pos.priceLower);
+                    allPricePoints.add(pos.priceUpper);
+                });
+            });
+            
+            // 添加尾部位置的边界点
+            allPricePoints.add(tailStartPrice);
+            allPricePoints.add(tailEndPrice);
+
+            // 排序所有价格点
+            const sortedPrices = Array.from(allPricePoints).sort((a, b) => a - b);
+
+            // 动态创建数据集结构
+            const datasets = { tail: [] };
+            analysis.curves.forEach((curve, curveIndex) => {
+                datasets[`curve${curveIndex + 1}`] = [];
+            });
+
+            // 为每个价格区间计算所有曲线的流动性
+            for (let i = 0; i < sortedPrices.length - 1; i++) {
+                const currentPrice = sortedPrices[i];
+                const nextPrice = sortedPrices[i + 1];
+                const midPrice = (currentPrice + nextPrice) / 2;
+
+                // 为每条曲线计算流动性
+                analysis.curves.forEach((curve, curveIndex) => {
+                    const curveKey = `curve${curveIndex + 1}`;
+                    const positions = allCurvePositions[curveKey];
+                    
+                    let totalLiquidity = 0;
+                    positions.forEach(pos => {
+                        if (midPrice >= pos.priceLower && midPrice <= pos.priceUpper) {
+                            totalLiquidity += pos.tokens;
+                        }
+                    });
+                    
+                    // 添加阶梯数据点（每个曲线都有相同的x坐标）
+                    datasets[curveKey].push({x: currentPrice, y: totalLiquidity});
+                    datasets[curveKey].push({x: nextPrice, y: totalLiquidity});
+                });
+
+                // 计算尾部位置流动性
+                let tailLiquidity = 0;
+                if (midPrice >= tailStartPrice && midPrice <= tailEndPrice) {
+                    tailLiquidity = analysis.tailTokens;
+                }
+                
+                datasets.tail.push({x: currentPrice, y: tailLiquidity});
+                datasets.tail.push({x: nextPrice, y: tailLiquidity});
+            }
+
+            return datasets;
+        }
+
+        // 生成图表
+        function generateChart(analysis) {
+            currentAnalysis = analysis; // 保存当前分析结果
+            const ctx = document.getElementById('liquidityChart').getContext('2d');
+
+            // 销毁现有图表
+            if (chart) {
+                chart.destroy();
+            }
+
+            // 创建分层流动性数据
+            const liquidityDatasets = createLayeredLiquidityData(analysis);
+
+            // 动态生成数据集配置
+            const chartDatasets = [];
+
+            // 曲线颜色和标签配置
+            const curveConfigs = [
+                { label: '曲线1 (低价区间)', backgroundColor: 'rgba(255, 107, 107, 0.3)', borderColor: '#ff6b6b' },
+                { label: '曲线2 (中价区间)', backgroundColor: 'rgba(78, 205, 196, 0.3)', borderColor: '#4ecdc4' },
+                { label: '曲线3 (高价区间)', backgroundColor: 'rgba(69, 183, 209, 0.3)', borderColor: '#45b7d1' },
+                { label: '曲线4 (超高价区间)', backgroundColor: 'rgba(156, 39, 176, 0.3)', borderColor: '#9c27b0' },
+                { label: '曲线5 (极高价区间)', backgroundColor: 'rgba(255, 152, 0, 0.3)', borderColor: '#ff9800' }
+            ];
+
+            // 动态添加曲线数据集
+            analysis.curves.forEach((curve, curveIndex) => {
+                const curveKey = `curve${curveIndex + 1}`;
+                const config = curveConfigs[curveIndex] || {
+                    label: `曲线${curveIndex + 1}`,
+                    backgroundColor: `hsla(${curveIndex * 60}, 70%, 60%, 0.3)`,
+                    borderColor: `hsl(${curveIndex * 60}, 70%, 50%)`
+                };
+
+                chartDatasets.push({
+                    label: config.label,
+                    data: liquidityDatasets[curveKey],
+                    backgroundColor: config.backgroundColor,
+                    borderColor: config.borderColor,
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0, // 设为0使线条变为直线，形成矩形
+                    pointRadius: 0,
+                    pointHoverRadius: 3,
+                    stepped: true // 使用阶梯线形成矩形效果
+                });
+            });
+
+            // 添加尾部位置数据集
+            chartDatasets.push({
+                label: '尾部位置 (极高价保护)',
+                data: liquidityDatasets.tail,
+                backgroundColor: 'rgba(150, 206, 180, 0.3)',
+                borderColor: '#96ceb4',
+                borderWidth: 3,
+                fill: true,
+                tension: 0, // 设为0使线条变为直线，形成矩形
+                pointRadius: 0,
+                pointHoverRadius: 3,
+                stepped: true // 使用阶梯线形成矩形效果
+            });
+
+            // 添加初始价格标记
+            chartDatasets.push({
+                label: '初始价格',
+                data: [{x: analysis.initialPrice, y: 0}],
+                backgroundColor: '#feca57',
+                borderColor: '#feca57',
+                pointRadius: 12,
+                pointHoverRadius: 15,
+                showLine: false,
+                type: 'scatter'
+            });
+
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: chartDatasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    scales: {
+                        x: {
+                            type: 'logarithmic',
+                            title: {
+                                display: true,
+                                text: analysis.isV3 ?
+                                    `${analysis.isContentCoin ? 'ContentCoin' : 'CreatorCoin'}价格 (1个${analysis.isContentCoin ? 'ContentCoin' : 'CreatorCoin'}值多少${analysis.priceUnit || 'WETH'}) - 对数刻度` :
+                                    `CreatorCoin价格 (1个CreatorCoin值多少${analysis.priceUnit || 'ZORA'}) - 对数刻度`
+                            },
+                            min: function() {
+                                // 使用实际数据的最低价格，留20%边距
+                                const allPrices = analysis.curves.flatMap(c => c.priceRange);
+                                return Math.min(...allPrices) * 0.8;
+                            }(),
+                            max: function() {
+                                // 使用实际数据的最高价格，包含尾部位置
+                                const allPrices = analysis.curves.flatMap(c => c.priceRange);
+                                const maxPrice = Math.max(...allPrices);
+                                return Math.max(maxPrice * 10, maxPrice * 2); // 确保包含尾部位置
+                            }(),
+                            stacked: chartMode === 'stacked',
+                            ticks: {
+                                callback: function(value, index, values) {
+                                    if (analysis.isV3 && value < 0.000001) {
+                                        return value.toExponential(2);
+                                    } else if (value >= 0.001) {
+                                        return value.toFixed(4);
+                                    } else {
+                                        return value.toFixed(6);
+                                    }
+                                },
+                                maxTicksLimit: 12,
+                                autoSkip: true,
+                                source: 'auto',
+                                includeBounds: true
+                            },
+                            grid: {
+                                display: true,
+                                color: 'rgba(0,0,0,0.1)'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: '流动性 (代币数量)'
+                            },
+                            min: 0,
+                            stacked: chartMode === 'stacked',
+                            ticks: {
+                                callback: function(value, index, values) {
+                                    if (value >= 1000000) {
+                                        return (value / 1000000).toFixed(1) + 'M';
+                                    } else if (value >= 1000) {
+                                        return (value / 1000).toFixed(1) + 'K';
+                                    }
+                                    return value.toLocaleString();
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const totalDatasets = analysis.curves.length + 2; // 曲线数 + 尾部位置 + 初始价格
+
+                                    if (context.datasetIndex === totalDatasets - 1) { // 初始价格 (最后一个)
+                                        const priceText = analysis.isV3 ?
+                                            (analysis.initialPrice < 0.000001 ? analysis.initialPrice.toExponential(3) : analysis.initialPrice.toFixed(6)) :
+                                            analysis.initialPrice.toFixed(6);
+                                        const unit = analysis.priceUnit || (analysis.isV3 ? 'ETH' : 'ZORA');
+                                        return `初始价格: ${priceText} ${unit}`;
+                                    }
+
+                                    // 动态生成标签
+                                    let label;
+                                    if (context.datasetIndex < analysis.curves.length) {
+                                        // 曲线标签
+                                        if (analysis.isV3) {
+                                            label = `发现位置 (${analysis.curves[context.datasetIndex].positions}个位置)`;
+                                        } else {
+                                            const curveLabels = ['低价区间', '中价区间', '高价区间', '超高价区间', '极高价区间'];
+                                            const curveLabel = curveLabels[context.datasetIndex] || `区间${context.datasetIndex + 1}`;
+                                            label = `曲线${context.datasetIndex + 1} (${curveLabel})`;
+                                        }
+                                    } else if (context.datasetIndex === analysis.curves.length) {
+                                        // 尾部位置
+                                        label = '尾部位置 (极高价保护)';
+                                    } else {
+                                        label = '未知';
+                                    }
+
+                                    const priceText = analysis.isV3 ?
+                                        (context.parsed.x < 0.000001 ? context.parsed.x.toExponential(3) : context.parsed.x.toFixed(6)) :
+                                        context.parsed.x.toFixed(6);
+                                    const unit = analysis.priceUnit || (analysis.isV3 ? 'ETH' : 'ZORA');
+                                    const coinType = analysis.isContentCoin ? 'ContentCoin' : 'CreatorCoin';
+
+                                    return [
+                                        `${label}`,
+                                        `${coinType}价格: ${priceText} ${unit}`,
+                                        `流动性: ${context.parsed.y.toLocaleString()} 代币`
+                                    ];
+                                }
+                            }
+                        },
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    }
+                }
+            });
+        }
+
+
+
+        // 全局变量存储当前状态
+        let currentAnalysis = null;
+        let chartMode = 'overlay';
+
+        // 切换图表模式
+        function switchChartMode(mode) {
+            chartMode = mode;
+            const overlayBtn = document.getElementById('overlayBtn');
+            const stackedBtn = document.getElementById('stackedBtn');
+            const discoveryBtn = document.getElementById('discoveryBtn');
+
+            // 重置所有按钮状态
+            overlayBtn?.classList.remove('active');
+            stackedBtn?.classList.remove('active');
+            discoveryBtn?.classList.remove('active');
+
+            // 设置当前模式按钮为活跃状态
+            if (mode === 'overlay') {
+                overlayBtn.classList.add('active');
+            } else if (mode === 'stacked') {
+                stackedBtn.classList.add('active');
+            } else if (mode === 'discovery') {
+                discoveryBtn?.classList.add('active');
+            }
+
+            if (currentAnalysis) {
+                generateChart(currentAnalysis);
+            }
+        }
+    </script>
+</body>
+</html>
