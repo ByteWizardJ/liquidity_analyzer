@@ -4,12 +4,12 @@
 
 ## 0. Uniswap V4 概要
 
-- **全局 Hook 扩展**：V4 将 Hook 作为官方扩展点，所有 `swap/modifyLiquidity` 操作都会在核心逻辑前后回调 Hook（`before*`/`after*`）。FreeefunHook 正是利用 `afterSwap` 在交易完成后立刻归集手续费，避免像 v3 那样分两笔交易或依赖外部脚本。
-- **统一资金国库**：V4 的 `PoolManager` 托管所有池子的资产；Hook、LP Manager 只能通过 `take/settle`、`modifyLiquiditiesWithoutUnlock` 等统一接口与资金交互，安全边界更清晰。v3 则是每个池自持资产，扩展逻辑往往需要部署新的 pair 合约。
+- **Hook 扩展**：V4 将 Hook 作为官方扩展点，所有 `swap/modifyLiquidity` 操作都会在核心逻辑前后回调 Hook（`before*`/`after*`）。FreeefunHook 正是利用 `afterSwap` 在交易完成后立刻归集手续费，避免像 v3 那样分两笔交易或依赖外部脚本。
+- **统一资金库**：V4 的 `PoolManager` 托管所有池子的资产；Hook、LP Manager 只能通过 `take/settle`、`modifyLiquiditiesWithoutUnlock` 等统一接口与资金交互，安全边界更清晰。v3 则是每个池自持资产，扩展逻辑往往需要部署新的 pair 合约。
 - **单事务组合**：配合 Permit2 / Universal Router，V4 可以在一次 Transaction 中完成授权、扣款、Hook 回调、手续费分润、ProtocolRewards 记账，减少中间步骤的失败点；V3 时代往往需要多笔交易串联。
 - **Gas / 部署成本**：Hook 绑定在 `PoolKey` 上，Freeefun 可以在单一池中同时托管双向仓位与分润逻辑，减少部署多个独立池的 gas 与管理成本。
 
-## 1. 体系结构概要
+## 1. 体系结构
 
 - **架构关系图**
 
@@ -57,19 +57,20 @@ graph TD
     Token -->|transfer gating| BC
 ```
 
-- **FreeefunFactory**：唯一的入口，负责创建 BondingCurve、触发毕业迁移、指挥 Hook 与 LP Manager 完成建池与流动性添加。
+- **FreeefunFactory**：唯一的入口，负责创建 Token、Bondingcurve阶段交易、触发毕业迁移、调用 Hook 与 LP Manager 完成建池与流动性添加。
 - **BondingCurve**：BondingCurve 阶段的交易与筹资引擎，毕业后计算迁移参数、授权 V4 组件、收集迁移残余（dust）。
 - **FreeefunHook**（`src/v4/FreeefunHook.sol`）：部署在 V4 池上的 Hook，负责创建池子、记录配置信息、在每次 swap 后触发手续费结算。
-- **FreeefunLpManager**（`src/v4/FreeefunLpManager.sol`）：保存单币头寸的元数据，执行批量铸造、无解锁 fee 收集、资产兑换与奖励分发。
-- **FreeefunToken**（`src/FreeefunToken.sol`）：实际发行的 ERC20 代币，原生支持在 BondingCurve 阶段的转账限制，迁移后成为 Uniswap V4 池的交易标的。
-- **外部依赖**：Uniswap V4 `PoolManager`/`PositionManager`，Permit2，WETH，ProtocolRewards。
+- **FreeefunLpManager**（`src/v4/FreeefunLpManager.sol`）：保存 LP 的数据信息，执行流动性的添加、 交易后 fee 收集与奖励分发。
+- **FreeefunToken**（`src/FreeefunToken.sol`）：实际发行的 ERC20 代币，在 BondingCurve 阶段的转账限制，毕业后解除限制。
+- **ProtocolRewards**: 奖励的记账合约。收集和记录奖励。
+- **外部依赖**：Uniswap V4 `PoolManager`/`PositionManager`，Permit2，WETH。
 
 ## 2. 核心角色职责
 
 - **Factory**  
-  - 负责创建 BondingCurve/FreeefunToken，负责整个生命周期的“工厂入口”；  
-  - 在 BondingCurve 阶段代理所有对外买卖接口，确保手续费按协议规则拆分；  
-  - 仅它能初始化 Hook 池、设定毕业状态，并调用 `FreeefunLpManager.placeLiquidity` 完成官方迁移仓位的铸造；  
+  - 负责创建 BondingCurve/FreeefunToken，负责整个生命周期的“入口”；  
+  - 在 BondingCurve 阶段代理所有对外买卖接口；  
+  - 仅它能初始化 Hook 池、设定毕业状态，并调用 `FreeefunLpManager.placeLiquidity` 完成流动性的铸造；  
   - 统一触发 `initiateV4Migration` → `approveV4Liquidity` → `collectV4Dust` 等迁移步骤，串接 Hook/LP Manager/ProtocolRewards。
 - **Hook**  
   - 记录池子 token 排序（`token0IsFreee`）、LP Manager 地址与毕业标志；  
@@ -77,12 +78,13 @@ graph TD
   - 针对未毕业的池拒绝 `beforeAddLiquidity`，防止外部添加 LP；
   - 每次 swap 后解析推荐人、驱动 LP Manager 结算手续费，并广播详细 `Swapped` 事件。
 - **LP Manager**  
-  - 为每个 Token 维护一次性 `TokenRewardInfo`，包含仓位数量、奖励分配和配对资产；  
+  - 为每个 Token 维护 `TokenRewardInfo`，包含仓位数量、奖励分配和配对资产；  
   - 仅允许 Factory 添加流动性，且仅 Hook 能触发 `collectRewardsWithoutUnlock`；  
   - 通过 `_bringFeesIntoContract`、`_uniSwapUnlocked`、`_distributePairedTokenRewards` 完成手续费提取、兑换与分发。
 - **BondingCurve**  
-  - 持有全部初始 Token 供应，维护虚拟储备、首买费、市值阈值等参数，计算买卖价格并拆分交易手续费；  
-  - 负责毕业判定（`tradingStopped`）、迁移参数打包、WETH 转换以及 Dust 清算；  
+  - 持有全部初始 Token 供应，维护虚拟储备、首买费、市值阈值等参数，计算买卖价格并分发Bondingcurve阶段的交易手续费；  
+  - 负责毕业判定（`tradingStopped`）
+  - 计算迁移参数、WETH 转换以及 Dust 清算；  
 - **FreeefunToken**  
   - 由 BondingCurve 克隆并一次性铸造，BondingCurve 阶段限制转账；  
   - 毕业后解除对交易对的限制，成为 V4 池中的交易资产。
@@ -91,12 +93,12 @@ graph TD
 
 | 阶段 | 描述 | 关键调用/责任方 |
 | --- | --- | --- |
-| **1. 创建** | Factory 克隆 BondingCurve 并在其内部完成 FreeefunToken 初始化，所有初始 Token 由 BondingCurve 持有。 | `FreeefunFactory.createFreeefunToken(_name, _symbol, _tokenURI, …)`<br>`BondingCurve.initialize()` 克隆 Token 并 `_mint` 到自身 |
-| **2. BondingCurve 交易期** | 工厂代理买卖入口，用户通过 BondingCurve 的公式交易，费用按 TokenConstants 拆分给创作者/平台/推荐人/协议；同时维护虚拟储备、首买费与市值上限。 | Factory `buyExactIn/out` / `sellExactIn/out` → BondingCurve 计算并调用 `_distributeTradeRewards` |
+| **1. 创建** | 通过 Factory 的创建方法完成 FreeefunToken 初始化，所有初始 Token 由 BondingCurve 持有。 | `FreeefunFactory.createFreeefunToken(_name, _symbol, _tokenURI, …)`<br>`BondingCurve.initialize()` 创建 Token 并 `_mint` 到自身 |
+| **2. BondingCurve 交易期** | 通过工厂的买卖入口，并按照 BondingCurve 的公式交易，费用按 TokenConstants 拆分给创作者/平台/推荐人/协议；同时维护虚拟储备、首买费与市值上限。 | Factory `buyExactIn/out` / `sellExactIn/out` → BondingCurve 计算并调用 `_distributeTradeRewards` |
 | **3. 毕业判定** | 当市值超过 `mcLowerLimit`，BondingCurve 置 `tradingStopped = true`，Factory 标记 `readyForMigration[token] = true`，停止后续 BondingCurve 交易。 | BondingCurve `_performPostBuyChecks()`；Factory `readyForMigration` 映射 |
 | **4. 迁移准备** | Factory 调用 `BondingCurve.initiateV4Migration()` 计算迁移参数并付迁移费用，返回 Hook、LP Manager、pairedToken、sqrtPriceX96 等信息。 | `BondingCurve.initiateV4Migration()` |
-| **5. V4 建池 & 铸造** | Factory 通过 Hook 创建 V4 池并置毕业标记；BondingCurve 授权 LP Manager 后，Factory 调用 `placeLiquidity` 生成两段单边仓位；结束后调用 `collectV4Dust` 清理残余 Token/WETH。 | Hook `initializePool` / `setTokenGraduated`<br>BondingCurve `approveV4Liquidity`<br>LP Manager `placeLiquidity`<br>BondingCurve `collectV4Dust` |
-| **6. 迁移后交易** | Token 持有人改为在 Uniswap V4 池中交易，每次 swap 后 Hook 自动驱动 LP Manager 结算手续费并按最新推荐人信息分润 | Hook `_afterSwap` → LP Manager `_collectRewards` → ProtocolRewards/受益人 |
+| **5. V4 建池 & 流动性添加** | Factory 通过 Hook 创建 V4 池并置毕业标记；BondingCurve 授权 LP Manager 后，Factory 调用 `placeLiquidity` 生成两段单边流动性；结束后调用 `collectV4Dust` 清理残余 Token/WETH。 | Hook `initializePool` / `setTokenGraduated`<br>BondingCurve `approveV4Liquidity`<br>LP Manager `placeLiquidity`<br>BondingCurve `collectV4Dust` |
+| **6. 迁移后交易** | Token 在 Uniswap V4 池中交易，每次 swap 后 Hook 自动驱动 LP Manager 结算手续费并按最新推荐人信息分润 | Hook `_afterSwap` → LP Manager `_collectRewards` → ProtocolRewards/受益人 |
 
 ### 生命周期概览
 1. **发行**：Factory 创建 Token & BondingCurve → Token 供应归 BondingCurve 管理。  
@@ -184,7 +186,7 @@ sequenceDiagram
 
 ### 流动性数据概览
 
-下图展示 Base 主网中两段单边仓位所覆盖的 Freee 价格区间：
+下图展示 Base 主网中两段单边仓位所覆盖的 Freee Token 价格区间：
 
 <svg width="880" height="260" viewBox="0 0 880 260" xmlns="http://www.w3.org/2000/svg">
   <style>
@@ -209,7 +211,7 @@ sequenceDiagram
   <text x="500" y="226" class="axis" text-anchor="middle">1.1919528150e-8</text>
   <text x="730" y="226" class="axis" text-anchor="middle">1.2053759885e-4</text>
   <text x="230" y="112" class="label">WETH 单边区间</text>
-  <text x="550" y="112" class="label">Freee 单边区间</text>
+  <text x="520" y="112" class="label">Freee Token 单边区间</text>
   <text x="380" y="50" class="label">单位：WETH/Token</text>
 </svg>
 
@@ -279,16 +281,16 @@ sequenceDiagram
 | 发生阶段（时间顺序） | 费用/对象 | 占比（相对交易量） | 流向 | 说明 |
 | --- | --- | --- | --- | --- |
 | **首次买入**（BondingCurve 第一次 `buy`） | First Buy Fee | 固定值 `firstBuyFee` | ProtocolRewards（账本合约，reason=`FIRST_BUY_FEE`） | 仅首笔买入收取，资金交由 ProtocolRewards 托管并归属 `protocolRewardRecipient`。 |
-| **BondingCurve 常规交易** | 交易手续费（汇总） | 占交易量 2% | ProtocolRewards（账本合约） | Factory 代用户调用 BondingCurve 后，统一将 2% 手续费记账。 |
+| **BondingCurve 常规交易** | 交易手续费（汇总） | 占交易量 2% | ProtocolRewards（账本合约） | Factory 调用 BondingCurve 的交易方法后，统一将 2% 手续费记账。 |
 |  | 创作者份额 | 占交易量 1%（50% × 2%） | ProtocolRewards（reason=`TRADE_FREEFUN_CREATOR_REWARD`） | 归属 payoutRecipient。 |
 |  | 创建推荐人份额 | 占交易量 0.2%（10% × 2%） | ProtocolRewards（reason=`TRADE_FREEFUN_PLATFORM_REFERRER_REWARD`） | 未设置时回退至 `protocolRewardRecipient`。 |
-|  | 交易推荐人份额 | 占交易量 0.2%（10% × 2%） | ProtocolRewards（reason=`TRADE_FREEFUN_TRADE_REFERRER_REWARD`） | 使用 tradeReferral，缺省回退协议。 |
+|  | 交易推荐人份额 | 占交易量 0.2%（10% × 2%） | ProtocolRewards（reason=`TRADE_FREEFUN_TRADE_REFERRER_REWARD`） | 使用 tradeReferral，未设置时回退至协议。 |
 |  | 协议份额 | 占交易量 0.6%（30% × 2%） | ProtocolRewards（reason=`TRADE_FREEFUN_PROTOCOL_REWARD`） | 归属 `protocolRewardRecipient`。 |
 | **迁移准备** | Migration Fee | 固定 `fixedMigrationFee` | ProtocolRewards（reason=`MIGRATION_FEE`） | BondingCurve 在 `initiateV4Migration` 时一次性上缴。 |
 | **V4 LP 奖励** | 交易手续费（汇总） | 占交易量 2% | ProtocolRewards（账本合约） | Hook 触发 LP Manager 收集 V4 手续费后统一记账。 |
 |  | 创作者份额 | 占交易量 1%（50% × 2%） | ProtocolRewards（reason=`LIQUIDITY_CREATOR_REWARD`） | 归属 payoutRecipient。 |
 |  | 创建推荐人份额 | 占交易量 0.2%（10% × 2%） | ProtocolRewards（reason=`LIQUIDITY_PLATFORM_REFERRER_REWARD`） | 未设置时回退协议。 |
-|  | 交易推荐人份额 | 占交易量 0.2%（10% × 2%） | ProtocolRewards（reason=`LIQUIDITY_TRADE_REFERRER_REWARD`） | Hook 解析 tradeReferral，缺省回退协议。 |
+|  | 交易推荐人份额 | 占交易量 0.2%（10% × 2%） | ProtocolRewards（reason=`LIQUIDITY_TRADE_REFERRER_REWARD`） | Hook 解析 tradeReferral，未设置时回退至协议。 |
 |  | 协议份额 | 占交易量 0.6%（30% × 2%） | ProtocolRewards（reason=`LIQUIDITY_PROTOCOL_REWARD`） | 记入 `protocolRewardRecipient`。 |
 | **迁移收尾** | Dust 回收 | 迁移余量 | ProtocolRewards（reason=`MIGRATION_DUST`） | BondingCurve `collectV4Dust` 将多余 WETH/ETH 上缴；Freee Token 余量直接 burn。 |
 
