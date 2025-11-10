@@ -188,32 +188,8 @@ sequenceDiagram
 
 下图展示 Base 主网中两段单边仓位所覆盖的 Freee Token 价格区间：
 
-<svg width="880" height="260" viewBox="0 0 880 260" xmlns="http://www.w3.org/2000/svg">
-  <style>
-    .axis { font: 14px sans-serif; fill: #333333; }
-    .label { font: 18px sans-serif; font-weight: 600; fill: #1f1f1f; }
-    .value { font: 14px monospace; fill: #1f1f1f; }
-    .grad { font: 14px monospace; fill: #c0392b; font-weight: 600; }
-  </style>
-  <line x1="120" y1="190" x2="760" y2="190" stroke="#444444" stroke-width="2"/>
-  <rect x="210" y="120" width="160" height="50" rx="8" fill="#6CA6FF" opacity="0.85"/>
-  <rect x="500" y="120" width="230" height="50" rx="8" fill="#FFAA7F" opacity="0.85"/>
-  <line x1="390" y1="105" x2="390" y2="205" stroke="#c0392b" stroke-width="2" stroke-dasharray="6 6"/>
-  <circle cx="390" cy="100" r="7" fill="#c0392b"/>
-  <text x="380" y="85" class="grad" text-anchor="middle">毕业价 1.1794999987e-8</text>
-  <line x1="210" y1="190" x2="210" y2="210" stroke="#444444" stroke-width="2"/>
-  <line x1="370" y1="190" x2="370" y2="210" stroke="#444444" stroke-width="2"/>
-  <line x1="500" y1="190" x2="500" y2="210" stroke="#444444" stroke-width="2"/>
-  <line x1="730" y1="190" x2="730" y2="210" stroke="#444444" stroke-width="2"/>
-  <text x="120" y="226" class="axis"></text>
-  <text x="210" y="226" class="axis" text-anchor="middle">8.20625739e-10</text>
-  <text x="370" y="226" class="axis" text-anchor="middle">1.1706906608e-8</text>
-  <text x="500" y="226" class="axis" text-anchor="middle">1.1919528150e-8</text>
-  <text x="730" y="226" class="axis" text-anchor="middle">1.2053759885e-4</text>
-  <text x="230" y="112" class="label">WETH 单边区间</text>
-  <text x="520" y="112" class="label">Freee Token 单边区间</text>
-  <text x="380" y="50" class="label">单位：WETH/Token</text>
-</svg>
+![](../imgs/1.png)
+
 
 #### 核心价格参数
 
