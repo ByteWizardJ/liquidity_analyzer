@@ -146,9 +146,9 @@ sequenceDiagram
 3. **建池 + 升级状态**  
    - Factory 调用 Hook 的 `initializePool` 创建带 Hook 的 V4 池；  
    - 紧接着调用 `setTokenGraduated(poolKey, true)` 解锁后续流动性操作。
-4. **授权 & 铸造头寸**  
+4. **授权 & 铸造LP**  
    - BondingCurve 通过 `approveV4Liquidity` 授权 LP Manager；  
-   - Factory 调用 `FreeefunLpManager.placeLiquidity`，批量创建两段单边仓位（Freee/Tide-in & pairedToken-only）。
+   - Factory 调用 `FreeefunLpManager.placeLiquidity`，批量创建两段单边流动性（Freee/Tide-in & pairedToken-only）。
 5. **Dust 清理**  
    - Factory 调用 `collectV4Dust`，Burn 多余 Freee、将 WETH 赎回转入 ProtocolRewards（理由 MIGRATION_DUST）；  
    - 如为其它 ERC20 配对，则直接转账给协议奖励账户。
